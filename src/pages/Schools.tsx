@@ -11,6 +11,8 @@ export default function Schools({ user }: { user: any }) {
   const [schools, setSchools] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const isFullAdmin = user?.role === 'super-admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador@exemplo.com' || user?.email === 'administrador';
+  const isTrial = user?.planId === 'trial' || user?.isTrial;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [selectedSchoolForQR, setSelectedSchoolForQR] = useState<any>(null);
@@ -49,9 +51,8 @@ export default function Schools({ user }: { user: any }) {
 
   const loadSchools = async () => {
     try {
-      const isSuperAdmin = user?.role === 'super-admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador@exemplo.com';
       const allowedUnits = user?.units || [];
-      const data = await api.schools.list({ isAdmin: isSuperAdmin, allowedUnits });
+      const data = await api.schools.list({ isAdmin: isFullAdmin, allowedUnits });
       setSchools(data || []);
     } catch (err) {
       console.error(err);
@@ -62,7 +63,6 @@ export default function Schools({ user }: { user: any }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const isTrial = user?.planId === 'trial' || user?.isTrial;
     if (isTrial && !editingSchool && schools.length >= 1) {
       alert("No seu teste grátis você pode cadastrar apenas 1 unidade escolar.");
       return;
@@ -278,23 +278,56 @@ export default function Schools({ user }: { user: any }) {
   };
 
   const filteredSchools = schools.filter(s => {
-    const isAdmin = user?.role === 'admin' || user?.role === 'super-admin';
+    const searchTermLower = searchTerm.toLowerCase();
     
-    // Admins see all
-    if (isAdmin) {
-      return s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-             (s.cnpj && s.cnpj.includes(searchTerm));
-    }
+    // Basic name/cnpj match for search
+    const matchesSearch = s.name.toLowerCase().includes(searchTermLower) ||
+                         (s.cnpj && s.cnpj.includes(searchTermLower)); // added LowerCase here too
     
-    // Regular users and Trial users see only their own records
-    const isOwner = s.ownerId === user?.id || s.ownerId === user?.uid;
-    const userUnits = user?.units || [];
-    const hasUnitAccess = userUnits.includes(s.name);
-    
-    if (!isOwner && !hasUnitAccess) return false;
+    if (!matchesSearch) return false;
 
-    return s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           s.cnpj.includes(searchTerm);
+    // Full Admins see all matching search
+    if (isFullAdmin) return true;
+    
+    // Regular admins with NO units assigned see all schools (legacy behavior for main admins)
+    if (user?.role === 'admin' && (!user?.units || user.units.length === 0)) return true;
+
+    // Others (Psychologists, etc.) see only if they have unit access
+    // We prioritize unit access over ownership for restricted roles if units are defined
+    const cleanStr = (str: string) => {
+      if (!str) return "";
+      return String(str)
+        .trim()
+        .toUpperCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/SCHOOL|ESCOLA|UNIDADE/g, '')
+        .trim();
+    };
+
+    const userUnits = (user?.units || []).map((u: string) => cleanStr(u)).filter(Boolean);
+    const isOwner = s.ownerId === user?.id || s.ownerId === user?.uid;
+    
+    const cleanSchoolName = cleanStr(s.name);
+    const cleanSchoolUnit = cleanStr(s.unit || "");
+
+    const hasUnitAccess = userUnits.some((u: string) => {
+      if (!u) return false;
+      // Comparação exata ou parcial segura
+      return u === cleanSchoolName || 
+             u === cleanSchoolUnit || 
+             cleanSchoolName === u || // redundant but safe
+             (u.length > 3 && cleanSchoolName.includes(u)) || 
+             (u.length > 3 && cleanSchoolUnit.includes(u));
+    });
+    
+    // If user has defined units, prioritize them. 
+    if (userUnits.length > 0) {
+      return hasUnitAccess;
+    }
+
+    // Default to ownership for non-admin users without specific units assigned
+    return isOwner;
   });
 
   if (loading) return <div>Carregando...</div>;
@@ -306,7 +339,7 @@ export default function Schools({ user }: { user: any }) {
           <SchoolIcon className="text-sesi-blue" size={28} />
           <h2 className="text-2xl font-bold text-gray-800">Gestão de Escolas</h2>
         </div>
-        {(user?.role === 'admin' || user?.planId === 'trial' || user?.isTrial) && (
+        {(isFullAdmin || isTrial) && (
           <button 
             onClick={() => setIsModalOpen(true)}
             className="bg-sesi-blue text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors"
@@ -367,7 +400,7 @@ export default function Schools({ user }: { user: any }) {
                 >
                   <QrCode size={18} />
                 </button>
-                {(user?.role === 'admin' || user?.planId === 'trial' || user?.isTrial) && (
+                {(isFullAdmin || isTrial) && (
                   <>
                     <button 
                       onClick={() => handleEdit(school)} 

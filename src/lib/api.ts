@@ -114,11 +114,16 @@ function applyUnitSecurity(q: any, filters: any, userId: string): { query: any, 
     return { query: query(q, where('unit', '==', unitValue)), isAllowed: true };
   }
 
+  // Especial para Escolas: permitimos buscar todas para usuários autenticados
+  // e filtramos localmente no componente para evitar problemas de case-sensitivity e permitir acesso a owners
+  if (filters?.isSchoolList === true) {
+    return { query: q, isAllowed: true };
+  }
+
   if (isFallback) {
-    if (allowedUnits.length > 0 && allowedUnits.length <= 30) {
+    if (allowedUnits.length > 0 && allowedUnits.length <= 10) {
        return { query: query(q, where('unit', 'in', allowedUnits)), isAllowed: true };
     }
-    // Fallback must at least filter by ownership if no units are assigned, to satisfy security rules
     return { query: query(q, where('ownerId', '==', userId)), isAllowed: true };
   }
 
@@ -135,9 +140,11 @@ function applyUnitSecurity(q: any, filters: any, userId: string): { query: any, 
       if (!isAllowed) return { query: q, isAllowed: false };
       return { query: query(q, where('unit', '==', requestedUnit)), isAllowed: true };
     } else {
-      if (allowedUnits.length <= 30) {
+      if (allowedUnits.length > 0 && allowedUnits.length <= 10) {
         return { query: query(q, where('unit', 'in', allowedUnits)), isAllowed: true };
       } else {
+        // Se tem muitas unidades ou nenhuma especificada na busca, tenta filtrar por owner ou profissional
+        // mas em algumas coleções (como escolas) permitimos retornar a query base se isSchoolList for true
         return { query: query(q, where(filters?.professionalId === userId ? 'professionalId' : 'ownerId', '==', userId)), isAllowed: true };
       }
     }
@@ -741,7 +748,7 @@ export const api = {
 
         if (!userId) return [];
 
-        const { query: qSecure, isAllowed } = applyUnitSecurity(q, filters, userId);
+        const { query: qSecure, isAllowed } = applyUnitSecurity(q, { ...filters, isSchoolList: true }, userId);
         if (!isAllowed) return [];
         q = qSecure;
 

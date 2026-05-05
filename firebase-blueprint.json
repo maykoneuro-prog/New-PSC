@@ -260,6 +260,7 @@
     "documents": { "schema": "Document", "description": "Collection of generated documents" },
     "leads": { "schema": "Lead", "description": "Collection of leads" },
     "plans": { "schema": "Plan", "description": "SaaS plans" },
-    "subscriptions": { "schema": "Subscription", "description": "Unit subscriptions" }
+    "subscriptions": { "schema": "Subscription", "description": "Unit subscriptions" },
+    "test": { "schema": "object", "description": "Connection test collection" }
   }
 }

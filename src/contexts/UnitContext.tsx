@@ -17,26 +17,46 @@ export function UnitProvider({ children, user }: { children: React.ReactNode, us
     return saved || (user?.units?.[0] || 'Administração Central');
   });
 
-  // Fetch schools owned by user to populate available units if they are not global admin
+  // Fetch schools to populate available units
   useEffect(() => {
-    if (user && user.role !== 'admin') {
-      const loadUserSchools = async () => {
+    if (user) {
+      const loadUnits = async () => {
         try {
-          const schools = await api.schools.list({ isAdmin: false });
-          if (schools) {
-            const units = schools.map((s: any) => s.unit || s.name).filter(Boolean);
-            setDynamicUnits(units);
+          // If admin with units, we don't need to fetch all schools for dynamic units
+          // If admin with NO units, or super-admin, we fetch all
+          const isSuper = user?.role === 'super-admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador';
+          const isAdminWithoutUnits = user?.role === 'admin' && (!user?.units || user.units.length === 0);
+          
+          if (isSuper || isAdminWithoutUnits) {
+            const schools = await api.schools.list({ isAdmin: true });
+            if (schools) {
+              const units = schools.map((s: any) => s.unit || s.name).filter(Boolean);
+              setDynamicUnits(units);
+            }
+          } else if (user.role !== 'admin') {
+            // Psychologists/Others - only fetch what they own (fallback)
+            const schools = await api.schools.list({ isAdmin: false });
+            if (schools) {
+              const units = schools.map((s: any) => s.unit || s.name).filter(Boolean);
+              setDynamicUnits(units);
+            }
           }
         } catch (err) {
-          console.error("Error loading user schools for units:", err);
+          console.error("Error loading schools for units:", err);
         }
       };
-      loadUserSchools();
+      loadUnits();
     }
   }, [user]);
 
-  const userUnits = user?.role === 'admin' ? ['Administração Central', ...(user?.units || [])] : [...(user?.units || []), ...dynamicUnits];
-  const availableUnits = Array.from(new Set(userUnits)).filter(Boolean) as string[];
+  const isSuper = user?.role === 'super-admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador';
+  const isAdminWithoutUnits = user?.role === 'admin' && (!user?.units || user.units.length === 0);
+  
+  const availableUnits = React.useMemo(() => {
+    const baseUnits = (isSuper || isAdminWithoutUnits) ? ['Administração Central'] : [];
+    const userUnits = [...baseUnits, ...(user?.units || []), ...dynamicUnits];
+    return Array.from(new Set(userUnits)).filter(Boolean) as string[];
+  }, [isSuper, isAdminWithoutUnits, user?.units, dynamicUnits]);
 
   useEffect(() => {
     localStorage.setItem('activeUnit', activeUnit);

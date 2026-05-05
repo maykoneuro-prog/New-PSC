@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { collection, query, where, onSnapshot, doc, getDocFromServer, limit, getDocs } from "firebase/firestore";
+import { collection, query, where, onSnapshot, doc, getDoc, getDocFromServer, limit, getDocs } from "firebase/firestore";
 import { db, auth, googleProvider } from "./firebase";
 import { onAuthStateChanged, signInWithPopup, signInAnonymously } from "firebase/auth";
 import { motion } from "motion/react";
@@ -648,7 +648,13 @@ const Login = ({ onLogin }: any) => {
       }
     } catch (err: any) {
       console.error("Google login error:", err);
-      setError("Falha ao entrar com Google. Tente novamente.");
+      if (err.code === "auth/network-request-failed") {
+        setError("ERRO DE REDE: Falha ao conectar ao serviço de autenticação do Firebase. Isso pode ser causado por um bloqueador de anúncios, firewall corporativo ou se o domínio '" + window.location.hostname + "' não estiver autorizado nas configurações do Firebase console.");
+      } else if (err.code === "auth/unauthorized-domain") {
+        setError("DOMÍNIO NÃO AUTORIZADO: Adicione '" + window.location.hostname + "' em Autenticação > Configurações > Domínios Autorizados no Console do Firebase.");
+      } else {
+        setError("FALHA AO ENTRAR COM GOOGLE: " + (err.message || "Tente novamente mais tarde."));
+      }
     }
   };
 
@@ -779,12 +785,14 @@ const Register = ({ onLogin }: any) => {
       }
     } catch (err: any) {
       console.error("Google registration error:", err);
-      if (err.code === "auth/unauthorized-domain") {
+      if (err.code === "auth/network-request-failed") {
+        setError("ERRO DE REDE: Falha ao conectar ao serviço de autenticação do Firebase. Isso pode ser causado por um bloqueador de anúncios, firewall corporativo ou se o domínio '" + window.location.hostname + "' não estiver autorizado nas configurações do Firebase console.");
+      } else if (err.code === "auth/unauthorized-domain") {
         setError("ESTE DOMÍNIO NÃO ESTÁ AUTORIZADO NO FIREBASE. No console do Firebase, adicione '" + window.location.hostname + "' em Autenticação > Configurações > Domínios Autorizados.");
       } else if (err.code === "auth/popup-blocked") {
         setError("O POP-UP FOI BLOQUEADO. Por favor, permita pop-ups para este site para continuar.");
       } else {
-        setError("FALHA AO AUTENTICAR COM GOOGLE. Verifique se o domínio '" + window.location.hostname + "' está autorizado no console do Firebase.");
+        setError("FALHA AO AUTENTICAR COM GOOGLE: " + (err.message || "Tente novamente."));
       }
     } finally {
       setLoading(false);
@@ -1483,6 +1491,14 @@ const Dashboard = ({ user }: { user: any }) => {
 // --- Main App ---
 
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
+  );
+}
+
+function AppContent() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [authReady, setAuthReady] = useState(false);
@@ -1491,41 +1507,59 @@ export default function App() {
     // 1. Connection test - Silent and non-blocking
     const testConnection = async () => {
       try {
-        await getDocFromServer(doc(db, 'test', 'connection'));
-      } catch (error) {
-        // Silent error for connection test to avoid flooding logs
-      }
+        // Just check if we can reach firestore at all
+        await getDocFromServer(doc(db, 'test', 'connection')).catch(() => null);
+      } catch (e) {}
     };
     testConnection();
 
     // 2. Auth state sync
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (!firebaseUser) {
+      console.log("Auth state changed:", firebaseUser?.uid);
+      
+      // Try to recover user from localStorage for immediate UI
+      const savedUser = localStorage.getItem("user");
+      if (savedUser) {
         try {
-          await signInAnonymously(auth);
-          return;
+          const parsedUser = JSON.parse(savedUser);
+          if (!(parsedUser.expiresAt && new Date(parsedUser.expiresAt) < new Date() && parsedUser.role !== 'admin')) {
+             setUser(parsedUser);
+          }
         } catch (e) {
-          console.warn("Silent anonymous sign-in failed:", e);
+          console.error("Error parsing saved user:", e);
         }
       }
 
-      const savedUser = localStorage.getItem("user");
-      if (savedUser) {
-        const parsedUser = JSON.parse(savedUser);
-        
-        // Check if session user is expired (for trial users)
-        if (parsedUser.expiresAt && new Date(parsedUser.expiresAt) < new Date() && parsedUser.role !== 'admin') {
-          localStorage.removeItem("user");
-          setUser(null);
-        } else {
-          setUser(parsedUser);
+      // If user is authenticated, try to get fresh document
+      if (firebaseUser && !firebaseUser.isAnonymous && firebaseUser.email) {
+        try {
+          const usersRef = collection(db, "users");
+          const q = query(usersRef, where("email", "==", firebaseUser.email), limit(1));
+          const querySnapshot = await getDocs(q);
+          
+          if (!querySnapshot.empty) {
+            const userData = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() };
+            setUser(userData);
+            localStorage.setItem("user", JSON.stringify(userData));
+          }
+        } catch (err) {
+          console.warn("Error fetching user profile:", err);
         }
       }
+      
       setAuthReady(true);
       setLoading(false);
     });
 
-    return () => unsubscribeAuth();
+    const timeout = setTimeout(() => {
+      setAuthReady(true);
+      setLoading(false);
+    }, 4000);
+
+    return () => {
+      unsubscribeAuth();
+      clearTimeout(timeout);
+    };
   }, []);
 
   const handleLogin = (userData: any) => {
@@ -1539,13 +1573,22 @@ export default function App() {
     setUser(null);
   };
 
-  if (loading || !authReady) return <div className="min-h-screen flex items-center justify-center">Carregando...</div>;
+  if (loading || !authReady) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50">
+        <div className="w-16 h-16 border-4 border-pedagogic-blue border-t-transparent rounded-full animate-spin mb-4" />
+        <p className="text-slate-500 font-black uppercase tracking-widest text-[10px]">Iniciando SGE Psicologia...</p>
+        <div className="mt-8 text-[8px] text-slate-300 font-mono uppercase tracking-tight">
+          L: {String(loading)} | AR: {String(authReady)} | U: {user ? 'SET' : 'NULL'}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <ErrorBoundary>
-      <BrowserRouter>
-        <UnitProvider user={user}>
-          <Routes>
+    <BrowserRouter>
+      <UnitProvider user={user}>
+        <Routes>
             <Route path="/login" element={user ? <Navigate to="/" /> : <Login onLogin={handleLogin} />} />
             <Route path="/register" element={user ? <Navigate to="/" /> : <Register onLogin={handleLogin} />} />
             <Route path="/agendar" element={<PublicScheduling />} />
@@ -1677,6 +1720,5 @@ export default function App() {
           </Routes>
         </UnitProvider>
       </BrowserRouter>
-    </ErrorBoundary>
   );
 }
