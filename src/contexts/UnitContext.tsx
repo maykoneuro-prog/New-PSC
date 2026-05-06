@@ -17,23 +17,21 @@ export function UnitProvider({ children, user }: { children: React.ReactNode, us
     return saved || (user?.units?.[0] || 'Administração Central');
   });
 
+  const isSuper = user?.role === 'super-admin' || user?.role === 'admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador@sgepsicologia.com';
+  const isAdminWithoutUnits = user?.role === 'admin' && (!user?.units || user.units.length === 0);
+
   // Fetch schools to populate available units
   useEffect(() => {
     if (user) {
       const loadUnits = async () => {
         try {
-          // If admin with units, we don't need to fetch all schools for dynamic units
-          // If admin with NO units, or super-admin, we fetch all
-          const isSuper = user?.role === 'super-admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador';
-          const isAdminWithoutUnits = user?.role === 'admin' && (!user?.units || user.units.length === 0);
-          
           if (isSuper || isAdminWithoutUnits) {
             const schools = await api.schools.list({ isAdmin: true });
             if (schools) {
               const units = schools.map((s: any) => s.unit || s.name).filter(Boolean);
               setDynamicUnits(units);
             }
-          } else if (user.role !== 'admin') {
+          } else {
             // Psychologists/Others - only fetch what they own (fallback)
             const schools = await api.schools.list({ isAdmin: false });
             if (schools) {
@@ -47,10 +45,7 @@ export function UnitProvider({ children, user }: { children: React.ReactNode, us
       };
       loadUnits();
     }
-  }, [user]);
-
-  const isSuper = user?.role === 'super-admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador';
-  const isAdminWithoutUnits = user?.role === 'admin' && (!user?.units || user.units.length === 0);
+  }, [user, isSuper, isAdminWithoutUnits]);
   
   const availableUnits = React.useMemo(() => {
     const baseUnits = (isSuper || isAdminWithoutUnits) ? ['Administração Central'] : [];

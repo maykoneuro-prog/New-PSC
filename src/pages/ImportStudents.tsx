@@ -61,19 +61,19 @@ export default function ImportStudents({ user }: { user: any }) {
           setProgress({ current: 0, total: jsonData.length });
 
           if (importType === "students") {
-            const isSuperAdmin = user?.role === 'super-admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com';
+            const isSuperAdmin = user?.role === 'super-admin' || user?.role === 'admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador@sgepsicologia.com';
             const schoolsList = await api.schools.list({ 
               isAdmin: isSuperAdmin,
-              allowedUnits: (user?.units || []).map((u: string) => u.trim().toUpperCase())
+              allowedUnits: (user?.units || []).filter(u => typeof u === 'string').map((u: string) => u.trim().toUpperCase())
             }) as any[];
-            const schoolMap = new Map((schoolsList || []).map(s => [s.name.trim().toLowerCase(), s]));
+            const schoolMap = new Map((schoolsList || []).filter(s => s && s.name).map(s => [String(s.name).trim().toLowerCase(), s]));
 
             // OTIMIZAÇÃO: Busca todos os alunos da unidade de uma vez para comparar RAs
             // Isso evita uma consulta por linha da planilha
             const existingStudents = await api.students.list({ 
               unit: activeUnit, 
               isAdmin: isSuperAdmin,
-              allowedUnits: (user?.units || []).map((u: string) => u.trim().toUpperCase())
+              allowedUnits: (user?.units || []).filter(u => typeof u === 'string').map((u: string) => u.trim().toUpperCase())
             }) as any[];
             const existingRAMap = new Map(existingStudents.map(s => [String(s.ra), s.id]));
 
@@ -125,7 +125,7 @@ export default function ImportStudents({ user }: { user: any }) {
                   // Validação de segurança: o usuário tem permissão para importar nesta unidade?
                   if (!isSuperAdmin) {
                     const unitToCheck = rowUnit.toUpperCase();
-                    const allowedUnits = (user?.units || []).map((u: string) => u.trim().toUpperCase());
+                    const allowedUnits = (user?.units || []).filter(u => typeof u === 'string').map((u: string) => u.trim().toUpperCase());
                     const isAllowed = allowedUnits.some(u => {
                       const cleanAllowed = u.replace(/^(SESI|UNIDADE|ESCOLA|CENTRO|DEPARTAMENTO)\s+/gi, "").trim();
                       const cleanItem = unitToCheck.replace(/^(SESI|UNIDADE|ESCOLA|CENTRO|DEPARTAMENTO)\s+/gi, "").trim();
@@ -140,10 +140,10 @@ export default function ImportStudents({ user }: { user: any }) {
 
                   const existingId = existingRAMap.get(ra);
                   if (existingId) {
-                    await api.students.update(existingId, { ...studentData, ownerId: user?.id });
+                    await api.students.update(existingId, studentData);
                     updatedCount++;
                   } else {
-                    await api.students.create({ ...studentData, ownerId: user?.id });
+                    await api.students.create(studentData);
                     successCount++;
                   }
                 } catch (err: any) {
@@ -154,12 +154,12 @@ export default function ImportStudents({ user }: { user: any }) {
             }
           } else {
             // Import Schools logic
-            const isSuperAdmin = user?.role === 'super-admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com';
+            const isSuperAdmin = user?.role === 'super-admin' || user?.role === 'admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador@sgepsicologia.com';
             const existingSchools = await api.schools.list({ 
               isAdmin: isSuperAdmin,
-              allowedUnits: (user?.units || []).map((u: string) => u.trim().toUpperCase())
+              allowedUnits: (user?.units || []).filter(u => typeof u === 'string').map((u: string) => u.trim().toUpperCase())
             }) as any[];
-            const existingNamesMap = new Map(existingSchools.map(s => [s.name.trim().toLowerCase(), s.id]));
+            const existingNamesMap = new Map((existingSchools || []).filter(s => s && s.name).map(s => [String(s.name).trim().toLowerCase(), s.id]));
 
             const chunkSize = 10;
             for (let i = 0; i < jsonData.length; i += chunkSize) {
@@ -186,10 +186,10 @@ export default function ImportStudents({ user }: { user: any }) {
 
                   const existingId = existingNamesMap.get(schoolName.trim().toLowerCase());
                   if (existingId) {
-                    await api.schools.update(existingId, { ...schoolData, ownerId: user?.id });
+                    await api.schools.update(existingId, schoolData);
                     updatedCount++;
                   } else {
-                    await api.schools.create({ ...schoolData, ownerId: user?.id });
+                    await api.schools.create(schoolData);
                     successCount++;
                   }
                 } catch (err: any) {

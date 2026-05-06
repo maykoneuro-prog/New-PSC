@@ -25,12 +25,32 @@ export default function StudentPortal() {
   }, [schoolId]);
 
   const loadSchool = async () => {
+    if (!schoolId) {
+      setLoading(false);
+      return;
+    }
+    
     try {
-      const schools = await api.schools.list();
-      const found = schools.find((s: any) => s.id === schoolId);
+      // Use direct get for better reliability when non-authenticated
+      const found = await api.schools.get(schoolId);
+      if (!found) {
+        throw new Error("Dados da escola não encontrados.");
+      }
       setSchool(found);
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error("Error loading school details:", err);
+      // Fallback to list with public filter if direct get fails due to weird rules
+      try {
+        const schools = await api.schools.list({ public: true });
+        const found = schools.find((s: any) => s.id === schoolId);
+        if (found) {
+          setSchool(found);
+        } else {
+          setSchool(null);
+        }
+      } catch (innerErr: any) {
+        console.error("Critical error loading school:", innerErr);
+      }
     } finally {
       setLoading(false);
     }

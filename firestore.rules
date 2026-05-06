@@ -9,46 +9,50 @@ service cloud.firestore {
 
     // Common Helpers
     function isSignedIn() { return request.auth != null; }
+    function isAnonymous() { return isSignedIn() && request.auth.token.firebase.sign_in_provider == 'anonymous'; }
     
     function getUserData() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
     
     function isAdmin() {
-      return isSignedIn() && (
+      return isSignedIn() && !isAnonymous() && (
         getUserData().role == 'admin' || 
         getUserData().role == 'super-admin' ||
         request.auth.token.email == 'maykon.euro@gmail.com' ||
-        request.auth.token.email == 'administrador@exemplo.com'
+        request.auth.token.email == 'administrador@exemplo.com' ||
+        request.auth.token.email == 'administrador@sgepsicologia.com'
       );
     }
     
     function isOwner(data) {
-      return isSignedIn() && (data.ownerId == request.auth.uid || data.ownerId == request.auth.token.email);
+      return isSignedIn() && !isAnonymous() && (data.ownerId == request.auth.uid || data.ownerId == request.auth.token.email);
     }
 
     // Rules for Schools
     match /schools/{schoolId} {
-      allow list: if isSignedIn(); 
-      allow get: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && (isAdmin() || resource.data.ownerId == request.auth.uid);
+      allow list: if true; // Public listing allowed for portal/scheduling
+      allow get: if true;
+      allow create: if isSignedIn() && !isAnonymous();
+      allow update, delete: if isSignedIn() && (isAdmin() || isOwner(resource.data));
     }
     
     // Rules for Students
     match /students/{studentId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && !isAnonymous();
     }
 
     // Rules for Users
     match /users/{userId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       allow write: if isSignedIn() && (request.auth.uid == userId || isAdmin());
     }
 
     // Rules for Appointments
     match /appointments/{appointmentId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && !isAnonymous();
     }
 
     // Rules for Anonymous Reports
@@ -59,12 +63,13 @@ service cloud.firestore {
     }
 
     match /plans/{id} { allow read: if true; allow write: if isAdmin(); }
+    match /app_settings/{id} { allow read: if true; allow write: if isAdmin(); }
     match /test/{id} { allow read: if true; }
     match /test_connection/{id} { allow read, write: if true; }
-    match /scheduling_requests/{id} { allow read, write: if isSignedIn(); }
-    match /documents/{id} { allow read, write: if isSignedIn(); }
-    match /subscriptions/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    match /appointment_types/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
-    match /categories/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /scheduling_requests/{id} { allow create: if true; allow read, update, delete: if isSignedIn(); }
+    match /documents/{id} { allow read, write: if isSignedIn() && !isAnonymous(); }
+    match /subscriptions/{id} { allow read: if isSignedIn() && !isAnonymous(); allow write: if isAdmin(); }
+    match /appointment_types/{id} { allow read: if isSignedIn() && !isAnonymous(); allow write: if isAdmin(); }
+    match /categories/{id} { allow read: if true; allow write: if isAdmin(); }
   }
 }

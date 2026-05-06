@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { ShieldAlert, Send, ArrowLeft, CheckCircle2 } from "lucide-react";
-import { GoogleGenAI } from "@google/genai";
 
 export default function AnonymousReport() {
   const [searchParams] = useSearchParams();
@@ -14,12 +13,22 @@ export default function AnonymousReport() {
   const navigate = useNavigate();
 
   React.useEffect(() => {
-    if (schoolId) {
-      api.schools.list({ public: true }).then(schools => {
-        const found = (schools || []).find((s: any) => s.id === schoolId);
-        setSchool(found);
-      });
-    }
+    const loadSchool = async () => {
+      if (schoolId) {
+        try {
+          const found = await api.schools.get(schoolId);
+          setSchool(found);
+        } catch (err) {
+          console.error("Error loading school for report:", err);
+          // Fallback
+          api.schools.list({ public: true }).then(schools => {
+            const found = (schools || []).find((s: any) => s.id === schoolId);
+            setSchool(found);
+          });
+        }
+      }
+    };
+    loadSchool();
   }, [schoolId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,43 +39,15 @@ export default function AnonymousReport() {
     let aiData = { level: 'PENDENTE', isEmergency: false, category: 'outro' };
 
     try {
-      // AI Analysis
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (apiKey) {
-        const { GoogleGenAI, Type } = await import("@google/genai");
-        const ai = new GoogleGenAI({ apiKey });
-        
-        const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: `Analise este relato escolar anônimo: "${message}"`,
-          config: {
-            systemInstruction: `Você é um especialista em segurança escolar. Classifique o relato conforme as regras:
-            - CRÍTICO: Risco imediato à vida ou integridade física grave.
-            - MODERADO: Bullying persistente, brigas frequentes, comportamento preocupante.
-            - NORMAL: Reclamações comuns, relatos sem urgência.
-            
-            Identifique também se é uma EMERGÊNCIA e a categoria predominante.`,
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                level: { type: Type.STRING, enum: ["CRÍTICO", "MODERADO", "NORMAL"] },
-                isEmergency: { type: Type.BOOLEAN },
-                category: { type: Type.STRING }
-              },
-              required: ["level", "isEmergency", "category"]
-            }
-          }
-        });
-        
-        if (response.text) {
-          const parsed = JSON.parse(response.text);
-          aiData = {
-            level: parsed.level || 'NORMAL',
-            isEmergency: !!parsed.isEmergency,
-            category: parsed.category || 'outro'
-          };
-        }
+      // AI Analysis via Backend
+      const response = await fetch('/api/analyze-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message })
+      });
+      
+      if (response.ok) {
+        aiData = await response.json();
       }
     } catch (err) {
       console.error("AI Analysis failed:", err);

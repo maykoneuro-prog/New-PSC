@@ -187,14 +187,22 @@ export const api = {
         handleFirestoreError(error, OperationType.GET, path);
       }
     },
-    create: async (data: any) => {
+    create: async (data: any, id?: string) => {
       const path = 'users';
       try {
-        const docRef = await addDoc(collection(db, path), {
-          ...data,
-          createdAt: serverTimestamp()
-        });
-        return { ...data, id: docRef.id };
+        if (id) {
+          await setDoc(doc(db, path, id), {
+            ...data,
+            createdAt: serverTimestamp()
+          });
+          return { ...data, id };
+        } else {
+          const docRef = await addDoc(collection(db, path), {
+            ...data,
+            createdAt: serverTimestamp()
+          });
+          return { ...data, id: docRef.id };
+        }
       } catch (error) {
         handleFirestoreError(error, OperationType.CREATE, path);
       }
@@ -595,9 +603,17 @@ export const api = {
       const path = 'categories';
       try {
         const userId = auth.currentUser?.uid;
-        if (!userId) return [];
         
         let q = query(collection(db, path));
+        
+        // If public requested, allow listing regardless of auth status
+        if (filters?.public) {
+          const snapshot = await getDocs(q);
+          return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        }
+        
+        if (!userId) return [];
+        
         if (!filters?.isAdmin) {
           q = query(q, where('ownerId', '==', userId));
         }
@@ -735,6 +751,16 @@ export const api = {
   },
 
   schools: {
+    get: async (id: string) => {
+      const path = `schools/${id}`;
+      try {
+        const docSnap = await getDoc(doc(db, 'schools', id));
+        if (!docSnap.exists()) return null;
+        return { ...docSnap.data(), id: docSnap.id };
+      } catch (error) {
+        handleFirestoreError(error, OperationType.GET, path);
+      }
+    },
     list: async (filters?: any) => {
       const path = 'schools';
       try {

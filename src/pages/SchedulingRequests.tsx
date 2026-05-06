@@ -66,13 +66,14 @@ export default function SchedulingRequests({ user }: { user: any }) {
           studentPhone: req.studentPhone,
           schoolId: req.schoolId,
           schoolUnit: req.schoolUnit || schoolName,
-          unit: activeUnit, // Garantir que apareça na agenda da unidade atual
+          unit: req.schoolUnit || activeUnit, // Use a unidade da escola se existir, caso contrário a atual
+          ownerId: user?.id || user?.uid,
           category: categoryName,
           type: 'Intervenção Individual',
           status: 'confirmed',
-          date: format(new Date(), 'yyyy-MM-dd'), // Data atual como sugestão
+          date: format(new Date(), 'yyyy-MM-dd'),
           startTime: '08:00',
-          professionalId: user?.id,
+          professionalId: user?.id || user?.uid,
           professionalName: user?.name,
           notes: `Aprovado via solicitação em ${format(new Date(), 'dd/MM/yyyy')}. Detalhes: ${req.complaint || 'Não informada'}`,
           complaint: req.complaint || '',

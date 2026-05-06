@@ -31,21 +31,20 @@ export default function PublicScheduling() {
       }
 
       try {
-        const [schools, cats] = await Promise.all([
-          api.schools.list(),
-          api.categories.list()
+        const [foundSchool, cats] = await Promise.all([
+          api.schools.get(schoolId),
+          api.categories.list({ public: true })
         ]);
         
-        const foundSchool = schools.find((s: any) => s.id === schoolId);
         if (!foundSchool) {
-          setError("Escola não encontrada.");
+          setError("Escola não encontrada no sistema.");
         } else {
           setSchool(foundSchool);
         }
         setCategories(cats || []);
-      } catch (err) {
-        console.error(err);
-        setError("Erro ao carregar dados da escola.");
+      } catch (err: any) {
+        console.error("Load error:", err);
+        setError(err.message || "Erro ao carregar dados da escola.");
       } finally {
         setLoading(false);
       }

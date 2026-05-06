@@ -11,7 +11,7 @@ import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { collection, query, where, onSnapshot, doc, getDoc, getDocFromServer, limit, getDocs } from "firebase/firestore";
 import { db, auth, googleProvider } from "./firebase";
-import { onAuthStateChanged, signInWithPopup, signInAnonymously } from "firebase/auth";
+import { onAuthStateChanged, signInWithPopup, signInAnonymously, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword } from "firebase/auth";
 import { motion } from "motion/react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { api } from "./lib/api";
@@ -72,7 +72,7 @@ class ErrorBoundary extends Component<any, any> {
 
 const isSuperUser = (user: any) => {
   if (!user) return false;
-  return user?.role === 'super-admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador@exemplo.com';
+  return user?.role === 'super-admin' || user?.role === 'admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador@exemplo.com' || user?.email === 'administrador@sgepsicologia.com';
 };
 
 const Layout = ({ children, user, onLogout }: any) => {
@@ -550,6 +550,7 @@ const Login = ({ onLogin }: any) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const [appSettings, setAppSettings] = useState({ name: "SGE Psicologia", logoUrl: "https://images.weserv.nl/?url=i.imgur.com/NR6kaz6.png" });
   const navigate = useNavigate();
 
@@ -575,61 +576,89 @@ const Login = ({ onLogin }: any) => {
 
   const handleSubmit = async (e: any) => {
     e.preventDefault();
+    setError("");
+    setLoading(true);
+    
+    const formattedEmail = email.includes('@') ? email : `${email}@sgepsicologia.com`;
+    
     try {
-      // Check Firestore for user first (this allows overriding super-admin password)
-      let firestoreUser: any = null;
+      // 1. Authenticate with Firebase Auth
+      let userCredential;
       try {
-        firestoreUser = await api.users.findByEmail(email);
-      } catch (dbErr) {
-        console.warn("Firestore user check failed, proceeding to fallback:", dbErr);
-      }
-
-      if (firestoreUser) {
-        if (firestoreUser.password === password) {
-          if (firestoreUser.status === 'inactive') {
-            setError("Sua conta está inativa. Entre em contato com o administrador.");
-            return;
+        userCredential = await signInWithEmailAndPassword(auth, formattedEmail, password);
+      } catch (authErr: any) {
+        // Auto-provisioning for master admin accounts if they don't exist yet in Auth
+        if ((email === "administrador" || email === "maykon.euro@gmail.com") && password === "12345678" && 
+            (authErr.code === 'auth/invalid-credential' || authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-email')) {
+          try {
+            userCredential = await createUserWithEmailAndPassword(auth, formattedEmail, password);
+          } catch (createErr) {
+            throw authErr; // If creation fails, throw original error
           }
-
-          if (firestoreUser.expiresAt && new Date(firestoreUser.expiresAt) < new Date()) {
-            setError("Sua assinatura expirou. Entre em contato com o administrador para renovar.");
-            return;
-          }
-
-          // Force super_admin ID if it's the administrator email
-          const userToLogin = email === "administrador" ? { ...firestoreUser, id: "super_admin" } : firestoreUser;
-          onLogin(userToLogin);
-          navigate("/");
-          return;
         } else {
-          setError("Usuário ou senha incorretos.");
+          throw authErr;
+        }
+      }
+      
+      const firebaseUser = userCredential.user;
+
+      // 2. Fetch user profile from Firestore
+      const usersRef = collection(db, "users");
+      const q = query(usersRef, where("email", "==", firebaseUser.email), limit(1));
+      const querySnapshot = await getDocs(q);
+      
+      if (!querySnapshot.empty) {
+        const userData = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() } as any;
+        
+        if (userData.status === 'inactive') {
+          await signOut(auth);
+          setError("Sua conta está inativa. Entre em contato com o administrador.");
+          setLoading(false);
           return;
         }
-      }
 
-      // Hardcoded super-admin fallback for initial setup
-      if ((email === "administrador" || email === "maykon.euro@gmail.com") && password === "12345678") {
-        try {
-          await signInAnonymously(auth);
-        } catch (e) {
-          console.warn("Failed to sign in anonymously:", e);
+        if (userData.expiresAt && new Date(userData.expiresAt) < new Date() && userData.role !== 'admin') {
+          await signOut(auth);
+          setError("Sua assinatura expirou. Entre em contato com o administrador para renovar.");
+          setLoading(false);
+          return;
         }
-        const superAdmin = { 
-          id: "super_admin", 
-          name: "Super Administrador", 
-          role: "admin", 
-          email: email,
-          password: "12345678",
-          permissions: ['dashboard', 'students', 'import_students', 'appointments', 'documents', 'reports', 'settings', 'admin']
-        };
-        onLogin(superAdmin);
-        navigate("/");
-        return;
-      }
 
-      setError("Usuário ou senha incorretos.");
+        onLogin(userData);
+        navigate("/");
+      } else {
+        // Create initial Firestore Profile for super admins if missing
+        if (email === "administrador" || email === "maykon.euro@gmail.com") {
+          const superAdmin = { 
+            name: "Super Administrador", 
+            role: "admin", 
+            email: firebaseUser.email,
+            units: ['ADMINISTRAÇÃO CENTRAL'],
+            permissions: ['dashboard', 'students', 'import_students', 'appointments', 'documents', 'reports', 'settings', 'admin'],
+            status: 'active',
+            createdAt: new Date().toISOString()
+          };
+          
+          const docRef = await (api.users as any).create(superAdmin, firebaseUser.uid);
+          onLogin({ id: docRef.id, ...superAdmin });
+          navigate("/");
+        } else {
+          setError("Perfil de usuário não encontrado.");
+        }
+      }
     } catch (err: any) {
-      setError("Ocorreu um erro ao tentar fazer login.");
+      console.error("Login Error:", err);
+      if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        setError("E-mail ou senha incorretos.");
+      } else if (err.code === 'auth/invalid-email') {
+        setError("Formato de e-mail inválido.");
+      } else if (err.code === 'auth/network-request-failed') {
+        setError("Erro de rede. Verifique sua conexão.");
+      } else {
+        setError(err.message || "Erro ao realizar login.");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1517,34 +1546,57 @@ function AppContent() {
     const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
       console.log("Auth state changed:", firebaseUser?.uid);
       
-      // Try to recover user from localStorage for immediate UI
-      const savedUser = localStorage.getItem("user");
-      if (savedUser) {
-        try {
-          const parsedUser = JSON.parse(savedUser);
-          if (!(parsedUser.expiresAt && new Date(parsedUser.expiresAt) < new Date() && parsedUser.role !== 'admin')) {
-             setUser(parsedUser);
-          }
-        } catch (e) {
-          console.error("Error parsing saved user:", e);
-        }
+      if (!firebaseUser) {
+        // Only try anonymous if we are not on sensitive pages? 
+        // For now, let's just null the user.
+        setUser(null);
+        localStorage.removeItem("user");
+        setAuthReady(true);
+        setLoading(false);
+        return;
+      }
+
+      if (firebaseUser.isAnonymous) {
+        // Anonymous user - mainly for public scheduling/portal
+        setUser({ id: firebaseUser.uid, role: 'anonymous', permissions: [] });
+        setAuthReady(true);
+        setLoading(false);
+        return;
       }
 
       // If user is authenticated, try to get fresh document
-      if (firebaseUser && !firebaseUser.isAnonymous && firebaseUser.email) {
-        try {
-          const usersRef = collection(db, "users");
-          const q = query(usersRef, where("email", "==", firebaseUser.email), limit(1));
-          const querySnapshot = await getDocs(q);
-          
-          if (!querySnapshot.empty) {
-            const userData = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() };
-            setUser(userData);
-            localStorage.setItem("user", JSON.stringify(userData));
+      try {
+        const usersRef = collection(db, "users");
+        const q = query(usersRef, where("email", "==", firebaseUser.email), limit(1));
+        const querySnapshot = await getDocs(q);
+        
+        if (!querySnapshot.empty) {
+          const userData = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() } as any;
+          setUser(userData);
+          localStorage.setItem("user", JSON.stringify(userData));
+        } else {
+          // Check for super admin hardcoded emails
+          if (firebaseUser.email === 'maykon.euro@gmail.com' || firebaseUser.email === 'administrador@exemplo.com' || firebaseUser.email === 'administrador@sgepsicologia.com') {
+            const superAdmin = { 
+              id: firebaseUser.uid, 
+              name: "Super Administrador", 
+              role: "admin", 
+              email: firebaseUser.email,
+              units: ['ADMINISTRAÇÃO CENTRAL'],
+              permissions: ['dashboard', 'students', 'import_students', 'appointments', 'documents', 'reports', 'settings', 'admin']
+            };
+            setUser(superAdmin);
+            localStorage.setItem("user", JSON.stringify(superAdmin));
+          } else {
+            console.warn("User authenticated but profile not found in Firestore");
+            setUser(null);
           }
-        } catch (err) {
-          console.warn("Error fetching user profile:", err);
         }
+      } catch (err) {
+        console.warn("Error fetching user profile:", err);
+        // Fallback to localStorage ONLY if we are offline or having issues
+        const savedUser = localStorage.getItem("user");
+        if (savedUser) setUser(JSON.parse(savedUser));
       }
       
       setAuthReady(true);
