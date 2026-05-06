@@ -30,7 +30,11 @@ export default function Settings() {
   useEffect(() => {
     const savedUser = localStorage.getItem("user");
     const user = savedUser ? JSON.parse(savedUser) : null;
-    setIsTrial(user?.planId === 'trial' || user?.isTrial);
+    const isSuper = user?.email?.toLowerCase() === 'maykon.euro@gmail.com' || 
+                    user?.email?.toLowerCase() === 'administrador@sgepsicologia.com' ||
+                    user?.role === 'admin' || user?.role === 'super-admin';
+                    
+    setIsTrial((user?.planId === 'trial' || user?.isTrial) && !isSuper);
     loadData();
   }, []);
 

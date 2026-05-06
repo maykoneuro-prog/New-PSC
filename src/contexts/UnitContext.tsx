@@ -17,7 +17,12 @@ export function UnitProvider({ children, user }: { children: React.ReactNode, us
     return saved || (user?.units?.[0] || 'Administração Central');
   });
 
-  const isSuper = user?.role === 'super-admin' || user?.role === 'admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador@sgepsicologia.com';
+  const isSuper = (() => {
+    if (!user) return false;
+    const email = user?.email?.toLowerCase();
+    const superEmails = ['maykon.euro@gmail.com', 'administrador@sgepsicologia.com'];
+    return user?.role === 'super-admin' || user?.role === 'admin' || user?.id === 'super_admin' || superEmails.includes(email);
+  })();
   const isAdminWithoutUnits = user?.role === 'admin' && (!user?.units || user.units.length === 0);
 
   // Fetch schools to populate available units

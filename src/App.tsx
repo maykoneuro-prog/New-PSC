@@ -72,7 +72,9 @@ class ErrorBoundary extends Component<any, any> {
 
 const isSuperUser = (user: any) => {
   if (!user) return false;
-  return user?.role === 'super-admin' || user?.role === 'admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador@exemplo.com' || user?.email === 'administrador@sgepsicologia.com';
+  const email = user?.email?.toLowerCase();
+  const superEmails = ['maykon.euro@gmail.com', 'administrador@exemplo.com', 'administrador@sgepsicologia.com'];
+  return user?.role === 'super-admin' || user?.role === 'admin' || user?.id === 'super_admin' || superEmails.includes(email);
 };
 
 const Layout = ({ children, user, onLogout }: any) => {
@@ -317,10 +319,10 @@ const Layout = ({ children, user, onLogout }: any) => {
     .map(cat => ({
       ...cat,
       items: cat.items.filter(item => {
-        const isTrial = user?.planId === 'trial' || user?.isTrial;
+        const isTrial = (user?.planId === 'trial' || user?.isTrial) && !isSuperUser(user);
         if (isTrial && (item as any).hiddenForTrial) return false;
         
-        if (user?.role === 'admin' || isTrial) return true;
+        if (isSuperUser(user) || (user?.planId === 'trial' || user?.isTrial)) return true;
         if (!item.permission) return true; // Items without permission (like Instructions) are visible to all
         return user?.permissions?.includes(item.permission);
       })
@@ -583,22 +585,7 @@ const Login = ({ onLogin }: any) => {
     
     try {
       // 1. Authenticate with Firebase Auth
-      let userCredential;
-      try {
-        userCredential = await signInWithEmailAndPassword(auth, formattedEmail, password);
-      } catch (authErr: any) {
-        // Auto-provisioning for master admin accounts if they don't exist yet in Auth
-        if ((email === "administrador" || email === "maykon.euro@gmail.com") && password === "12345678" && 
-            (authErr.code === 'auth/invalid-credential' || authErr.code === 'auth/user-not-found' || authErr.code === 'auth/invalid-email')) {
-          try {
-            userCredential = await createUserWithEmailAndPassword(auth, formattedEmail, password);
-          } catch (createErr) {
-            throw authErr; // If creation fails, throw original error
-          }
-        } else {
-          throw authErr;
-        }
-      }
+      const userCredential = await signInWithEmailAndPassword(auth, formattedEmail, password);
       
       const firebaseUser = userCredential.user;
 
@@ -610,6 +597,15 @@ const Login = ({ onLogin }: any) => {
       if (!querySnapshot.empty) {
         const userData = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() } as any;
         
+        if (isSuperUser(userData)) {
+          userData.role = 'admin';
+          if (!userData.permissions) userData.permissions = [];
+          const adminPerms = ['dashboard', 'students', 'import_students', 'appointments', 'documents', 'reports', 'settings', 'admin', 'psychological_listening', 'scheduling_requests', 'schools'];
+          adminPerms.forEach(p => {
+            if (!userData.permissions.includes(p)) userData.permissions.push(p);
+          });
+        }
+
         if (userData.status === 'inactive') {
           await signOut(auth);
           setError("Sua conta está inativa. Entre em contato com o administrador.");
@@ -934,7 +930,7 @@ const Dashboard = ({ user }: { user: any }) => {
   const [schools, setSchools] = useState<any[]>([]);
   const [usage, setUsage] = useState<any>(null);
 
-  const isTrial = user?.planId === 'trial' || user?.isTrial;
+  const isTrial = (user?.planId === 'trial' || user?.isTrial) && !isSuperUser(user);
   const trialDaysLeft = user?.expiresAt ? Math.max(0, Math.ceil((new Date(user.expiresAt).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))) : 0;
 
   useEffect(() => {
@@ -1572,6 +1568,16 @@ function AppContent() {
         
         if (!querySnapshot.empty) {
           const userData = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() } as any;
+          
+          if (isSuperUser(userData)) {
+            userData.role = 'admin';
+            if (!userData.permissions) userData.permissions = [];
+            const adminPerms = ['dashboard', 'students', 'import_students', 'appointments', 'documents', 'reports', 'settings', 'admin', 'psychological_listening', 'scheduling_requests', 'schools'];
+            adminPerms.forEach(p => {
+              if (!userData.permissions.includes(p)) userData.permissions.push(p);
+            });
+          }
+
           setUser(userData);
           localStorage.setItem("user", JSON.stringify(userData));
         } else {
@@ -1647,7 +1653,7 @@ function AppContent() {
             <Route path="/student-portal" element={<StudentPortal />} />
             <Route path="/denuncia-anonima" element={<AnonymousReport />} />
             <Route path="/gestao-denuncias" element={
-              (user?.role === 'admin' || user?.permissions?.includes('psychological_listening')) ? (
+              (isSuperUser(user) || user?.permissions?.includes('psychological_listening')) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <AnonymousReportsManagement />
                 </Layout>
@@ -1656,7 +1662,7 @@ function AppContent() {
             
             <Route path="/" element={
               user ? (
-                (user?.permissions?.includes('dashboard') || user?.role === 'admin') ? (
+                (user?.permissions?.includes('dashboard') || isSuperUser(user)) ? (
                   <Layout user={user} onLogout={handleLogout}>
                     <Dashboard user={user} />
                   </Layout>
@@ -1665,7 +1671,7 @@ function AppContent() {
             } />
 
             <Route path="/alunos" element={
-              (user?.permissions?.includes('students') || user?.role === 'admin') ? (
+              (user?.permissions?.includes('students') || isSuperUser(user)) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <Students user={user} />
                 </Layout>
@@ -1673,7 +1679,7 @@ function AppContent() {
             } />
 
             <Route path="/importar" element={
-              (user?.permissions?.includes('import_students') || user?.role === 'admin') ? (
+              (user?.permissions?.includes('import_students') || isSuperUser(user)) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <ImportStudents user={user} />
                 </Layout>
@@ -1681,7 +1687,7 @@ function AppContent() {
             } />
 
             <Route path="/atendimentos" element={
-              (user?.permissions?.includes('appointments') || user?.role === 'admin') ? (
+              (user?.permissions?.includes('appointments') || isSuperUser(user)) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <Appointments user={user} />
                 </Layout>
@@ -1689,7 +1695,7 @@ function AppContent() {
             } />
 
             <Route path="/documentos" element={
-              (user?.permissions?.includes('documents') || user?.role === 'admin') ? (
+              (user?.permissions?.includes('documents') || isSuperUser(user)) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <Documents user={user} />
                 </Layout>
@@ -1697,7 +1703,7 @@ function AppContent() {
             } />
 
             <Route path="/relatorios" element={
-              (user?.permissions?.includes('reports') || user?.role === 'admin') ? (
+              (user?.permissions?.includes('reports') || isSuperUser(user)) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <Reports user={user} />
                 </Layout>
@@ -1705,7 +1711,7 @@ function AppContent() {
             } />
 
             <Route path="/escolas" element={
-              (user?.permissions?.includes('schools') || user?.role === 'admin') ? (
+              (user?.permissions?.includes('schools') || isSuperUser(user)) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <Schools user={user} />
                 </Layout>
@@ -1713,7 +1719,7 @@ function AppContent() {
             } />
 
             <Route path="/escolas/cadastro" element={
-              (user?.permissions?.includes('schools') || user?.role === 'admin') ? (
+              (user?.permissions?.includes('schools') || isSuperUser(user)) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <SchoolRegistration />
                 </Layout>
@@ -1721,7 +1727,7 @@ function AppContent() {
             } />
 
             <Route path="/solicitacoes" element={
-              (user?.permissions?.includes('scheduling_requests') || user?.role === 'admin') ? (
+              (user?.permissions?.includes('scheduling_requests') || isSuperUser(user)) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <SchedulingRequests user={user} />
                 </Layout>
@@ -1729,7 +1735,7 @@ function AppContent() {
             } />
 
             <Route path="/configuracoes" element={
-              (user?.permissions?.includes('settings') || user?.role === 'admin') ? (
+              (user?.permissions?.includes('settings') || isSuperUser(user)) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <Settings user={user} />
                 </Layout>
@@ -1761,7 +1767,7 @@ function AppContent() {
             } />
 
             <Route path="/admin" element={
-              user?.permissions?.includes('admin') ? (
+              (user?.permissions?.includes('admin') || isSuperUser(user)) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <Admin />
                 </Layout>

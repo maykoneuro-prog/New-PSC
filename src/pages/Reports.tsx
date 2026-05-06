@@ -33,7 +33,10 @@ export default function Reports({ user }: { user: any }) {
   const loadData = async () => {
     try {
       setLoading(true);
-      const isGlobalAdmin = (user?.role === 'admin' || user?.role === 'super-admin') && !(user?.planId === 'trial' || user?.isTrial);
+      const isSuper = user?.email?.toLowerCase() === 'maykon.euro@gmail.com' || 
+                      user?.email?.toLowerCase() === 'administrador@sgepsicologia.com' ||
+                      user?.role === 'admin' || user?.role === 'super-admin';
+      const isGlobalAdmin = isSuper || ((user?.role === 'admin' || user?.role === 'super-admin') && !(user?.planId === 'trial' || user?.isTrial));
       const allowedUnits = user?.units || [];
       
       const filters: any = { isAdmin: isGlobalAdmin };

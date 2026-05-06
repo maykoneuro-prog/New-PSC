@@ -11,8 +11,12 @@ export default function Schools({ user }: { user: any }) {
   const [schools, setSchools] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const isFullAdmin = user?.role === 'super-admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador@exemplo.com' || user?.email === 'administrador';
-  const isTrial = user?.planId === 'trial' || user?.isTrial;
+  const isSuper = user?.email?.toLowerCase() === 'maykon.euro@gmail.com' || 
+                  user?.email?.toLowerCase() === 'administrador@sgepsicologia.com' ||
+                  user?.role === 'admin' || user?.role === 'super-admin' ||
+                  user?.id === 'super_admin';
+  const isFullAdmin = isSuper;
+  const isTrial = (user?.planId === 'trial' || user?.isTrial) && !isSuper;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [selectedSchoolForQR, setSelectedSchoolForQR] = useState<any>(null);
