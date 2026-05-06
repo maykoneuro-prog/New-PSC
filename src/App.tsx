@@ -11,7 +11,7 @@ import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { collection, query, where, onSnapshot, doc, getDoc, getDocFromServer, limit, getDocs } from "firebase/firestore";
 import { db, auth, googleProvider } from "./firebase";
-import { onAuthStateChanged, signInWithPopup, signInAnonymously, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword } from "firebase/auth";
+import { onAuthStateChanged, signInWithPopup, signInWithEmailAndPassword, signOut, createUserWithEmailAndPassword } from "firebase/auth";
 import { motion } from "motion/react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { api } from "./lib/api";

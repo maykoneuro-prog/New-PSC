@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
+import { auth } from "../firebase";
 import { api } from "../lib/api";
 import { ClipboardCheck, AlertCircle, CheckCircle2 } from "lucide-react";
-import { auth } from "../firebase";
-import { signInAnonymously } from "firebase/auth";
 
 export default function PublicScheduling() {
   const [searchParams] = useSearchParams();
@@ -33,11 +32,6 @@ export default function PublicScheduling() {
       }
 
       try {
-        // Ensure some level of auth for better Firestore reliability
-        if (!auth.currentUser) {
-          await signInAnonymously(auth);
-        }
-
         const [foundSchool, cats] = await Promise.all([
           api.schools.get(schoolId),
           api.categories.list({ public: true })

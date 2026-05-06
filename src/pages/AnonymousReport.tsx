@@ -3,7 +3,6 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
 import { ShieldAlert, Send, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { auth } from "../firebase";
-import { signInAnonymously } from "firebase/auth";
 
 export default function AnonymousReport() {
   const [searchParams] = useSearchParams();
@@ -16,15 +15,6 @@ export default function AnonymousReport() {
 
   React.useEffect(() => {
     const loadSchool = async () => {
-      // Ensure auth context
-      if (!auth.currentUser) {
-        try {
-          await signInAnonymously(auth);
-        } catch (e) {
-          console.error("Anonymous sign in failed", e);
-        }
-      }
-
       if (schoolId) {
         try {
           const found = await api.schools.get(schoolId);
