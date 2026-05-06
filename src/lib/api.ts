@@ -714,6 +714,7 @@ export const api = {
       }
     },
     get: async (id: string) => {
+      if (!id) return null;
       const path = `documents/${id}`;
       try {
         const docSnap = await getDoc(doc(db, 'documents', id));
@@ -752,6 +753,7 @@ export const api = {
 
   schools: {
     get: async (id: string) => {
+      if (!id) return null;
       const path = `schools/${id}`;
       try {
         const docSnap = await getDoc(doc(db, 'schools', id));
