@@ -18,7 +18,56 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
-  // AI Analysis Route
+  // Config Check for Frontend
+  app.get("/api/config", (req, res) => {
+    res.json({ 
+      aiEnabled: !!process.env.GEMINI_API_KEY 
+    });
+  });
+
+  // Generic AI Generation Route
+  app.post("/api/ai/generate", async (req, res) => {
+    try {
+      const { prompt, model: modelName = "gemini-3-flash-preview", jsonMode = false } = req.body;
+      const apiKey = process.env.GEMINI_API_KEY;
+
+      if (!apiKey) {
+        console.warn("GEMINI_API_KEY not found in environment");
+        return res.status(503).json({ error: "AI service not configured" });
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: prompt,
+        config: jsonMode ? { responseMimeType: "application/json" } : undefined
+      });
+
+      const text = response.text || "";
+      
+      if (jsonMode) {
+        try {
+          let cleanText = text;
+          // Attempt to parse just in case it returned a code block
+          if (cleanText.includes("```json")) {
+            cleanText = cleanText.split("```json")[1].split("```")[0];
+          } else if (cleanText.includes("```")) {
+            cleanText = cleanText.split("```")[1].split("```")[0];
+          }
+          res.json(JSON.parse(cleanText));
+        } catch (e) {
+          res.json({ result: text });
+        }
+      } else {
+        res.json({ result: text });
+      }
+    } catch (error: any) {
+      console.error("AI Generation Error:", error);
+      res.status(500).json({ error: error.message || "Internal AI Error" });
+    }
+  });
+
+  // AI Analysis Route (Legacy simplified route)
   app.post("/api/analyze-report", async (req, res) => {
     try {
       const { message } = req.body;
@@ -29,14 +78,8 @@ async function startServer() {
         return res.json({ level: 'PENDENTE', isEmergency: false, category: 'outro' });
       }
 
-      const genAI = new GoogleGenAI(apiKey as any);
-      const model = (genAI as any).getGenerativeModel({ 
-        model: "gemini-1.5-flash",
-        generationConfig: {
-          responseMimeType: "application/json",
-        }
-      });
-
+      const ai = new GoogleGenAI({ apiKey });
+      
       const prompt = `Analise este relato escolar anônimo: "${message}". Classifique o relato conforme as regras: 
       - CRÍTICO: Risco imediato à vida ou integridade física grave. 
       - MODERADO: Bullying persistente, brigas frequentes, comportamento preocupante. 
@@ -44,10 +87,15 @@ async function startServer() {
       
       Retorne um JSON com: { "level": "CRÍTICO" | "MODERADO" | "NORMAL", "isEmergency": boolean, "category": string }`;
 
-      const result = await model.generateContent(prompt);
-      const response = await result.response;
-      const text = response.text();
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+        }
+      });
       
+      const text = response.text || "{}";
       res.json(JSON.parse(text));
     } catch (error) {
       console.error("AI Analysis Error:", error);

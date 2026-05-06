@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Search, FileText, Download, Trash2, Eye, ChevronRight, School, User, Calendar as CalendarIcon, ClipboardCheck, FileCheck, FileSignature, FileWarning, X, Settings, TrendingUp, LayoutGrid, List, ChevronDown, ChevronUp, UserPlus, CheckCircle2, Users, GraduationCap } from "lucide-react";
 import { api } from "../lib/api";
-import { GoogleGenAI } from "@google/genai";
+import { generateAIResponse, isAIEnabled } from "../lib/ai";
 import { generateDocumentPDF } from "../lib/documentGenerator";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -977,13 +977,10 @@ const SchoolDiagnosisForm = ({ formData, setFormData, user }: any) => {
     
     setGeneratingInsights(true);
     try {
-      const { GoogleGenAI } = await import("@google/genai");
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey || apiKey === "undefined" || apiKey === "") {
-        throw new Error("API Key não configurada. Se estiver no Vercel, adicione GEMINI_API_KEY às variáveis de ambiente do projeto.");
+      const aiEnabled = await isAIEnabled();
+      if (!aiEnabled) {
+        throw new Error("O serviço de Inteligência Artificial não está configurado.");
       }
-      
-      const ai = new GoogleGenAI({ apiKey });
       
       const prompt = `
         Aja como um especialista em Psicologia Escolar.
@@ -999,13 +996,10 @@ const SchoolDiagnosisForm = ({ formData, setFormData, user }: any) => {
         Responda de forma profissional e direta, focada em melhoria do bem-estar psicossocial.
       `;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-flash-latest",
-        contents: prompt
-      });
+      const response = await generateAIResponse(prompt);
       
-      if (response.text) {
-        setFormData({ ...formData, aiInsights: response.text });
+      if (response.result) {
+        setFormData({ ...formData, aiInsights: response.result });
       } else {
         throw new Error("Resposta da IA vazia");
       }
@@ -1184,13 +1178,10 @@ const PsychologicalListeningForm = ({ formData, setFormData, studentName }: any)
     
     setGeneratingInsights(true);
     try {
-      const { GoogleGenAI } = await import("@google/genai");
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey || apiKey === "undefined" || apiKey === "") {
-        throw new Error("API Key não configurada. Se estiver no Vercel, adicione GEMINI_API_KEY às variáveis de ambiente do projeto.");
+      const aiEnabled = await isAIEnabled();
+      if (!aiEnabled) {
+        throw new Error("O serviço de Inteligência Artificial não está configurado.");
       }
-      
-      const ai = new GoogleGenAI({ apiKey });
       
       const prompt = `
         Aja como um especialista em Psicologia Escolar Clínica e Educacional.
@@ -1207,13 +1198,10 @@ const PsychologicalListeningForm = ({ formData, setFormData, studentName }: any)
         Sua tarefa é cruzar esses dados e dar um feedback profissional de 3-4 lines sobre o perfil ou riscos identificados.
       `;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-flash-latest",
-        contents: prompt
-      });
+      const response = await generateAIResponse(prompt);
       
-      if (response.text) {
-        setFormData({ ...formData, aiInsights: response.text });
+      if (response.result) {
+        setFormData({ ...formData, aiInsights: response.result });
       } else {
         throw new Error("Resposta da IA vazia");
       }
@@ -1642,13 +1630,10 @@ const ClassroomEvolutionForm = ({ formData, setFormData, studentName }: any) => 
     
     setGenerating(true);
     try {
-      const { GoogleGenAI } = await import("@google/genai");
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey || apiKey === "undefined" || apiKey === "") {
-        throw new Error("API Key não configurada. Se estiver no Vercel, adicione GEMINI_API_KEY às variáveis de ambiente do projeto.");
+      const aiEnabled = await isAIEnabled();
+      if (!aiEnabled) {
+        throw new Error("O serviço de Inteligência Artificial não está configurado.");
       }
-      
-      const ai = new GoogleGenAI({ apiKey });
       const prompt = `
         Aja como um Psicólogo Escolar experiente. 
         Analise os dados de evolução em sala do aluno(a) ${studentName}.
@@ -1664,13 +1649,10 @@ const ClassroomEvolutionForm = ({ formData, setFormData, studentName }: any) => 
         Não use marcadores ou introduções genéricas. Vá direto ao ponto.
       `;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-flash-latest",
-        contents: prompt,
-      });
+      const response = await generateAIResponse(prompt);
 
-      if (response.text) {
-        setFormData({ ...formData, aiInsights: response.text });
+      if (response.result) {
+        setFormData({ ...formData, aiInsights: response.result });
       } else {
         throw new Error("Resposta da IA vazia");
       }
@@ -1845,13 +1827,10 @@ const PedagogicalParticipationForm = ({ formData, setFormData }: any) => {
     
     setGenerating(true);
     try {
-      const { GoogleGenAI } = await import("@google/genai");
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey || apiKey === "undefined" || apiKey === "") {
-        throw new Error("API Key não configurada.");
+      const aiEnabled = await isAIEnabled();
+      if (!aiEnabled) {
+        throw new Error("O serviço de Inteligência Artificial não está configurado.");
       }
-      
-      const ai = new GoogleGenAI({ apiKey });
       
       const prompt = `
         Aja como um Psicólogo Escolar experiente.
@@ -1866,13 +1845,12 @@ const PedagogicalParticipationForm = ({ formData, setFormData }: any) => {
         Responda com um texto profissional, focado em evolução pedagógica e socioemocional.
       `;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-flash-latest",
-        contents: prompt
-      });
+      const response = await generateAIResponse(prompt);
       
-      if (response.text) {
-        setFormData({ ...formData, aiParecer: response.text });
+      if (response.result) {
+        setFormData({ ...formData, aiParecer: response.result });
+      } else {
+        throw new Error("Resposta da IA vazia");
       }
     } catch (err: any) {
       console.error(err);
@@ -2003,13 +1981,10 @@ const GroupAttendanceForm = ({ formData, setFormData }: any) => {
     
     setGenerating(true);
     try {
-      const { GoogleGenAI } = await import("@google/genai");
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey || apiKey === "undefined" || apiKey === "") {
-        throw new Error("API Key não configurada.");
+      const aiEnabled = await isAIEnabled();
+      if (!aiEnabled) {
+        throw new Error("O serviço de Inteligência Artificial não está configurado.");
       }
-      
-      const ai = new GoogleGenAI({ apiKey });
       
       const prompt = `
         Aja como um facilitador de grupos e Psicólogo Escolar.
@@ -2021,13 +1996,12 @@ const GroupAttendanceForm = ({ formData, setFormData }: any) => {
         Responda com um título para a dinâmica e um passo-a-passo resumido (máximo 5 itens).
       `;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-flash-latest",
-        contents: prompt
-      });
+      const response = await generateAIResponse(prompt);
       
-      if (response.text) {
-        setFormData({ ...formData, aiDynamic: response.text });
+      if (response.result) {
+        setFormData({ ...formData, aiDynamic: response.result });
+      } else {
+        throw new Error("Resposta da IA vazia");
       }
     } catch (err: any) {
       console.error(err);

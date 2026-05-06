@@ -17,9 +17,11 @@ export default function AnonymousReportsManagement() {
 
   useEffect(() => {
     loadData();
-    // Check if API key exists (only for display/warning purposes)
-    const key = process.env.GEMINI_API_KEY;
-    setHasApiKey(!!key && key !== "undefined" && key !== "");
+    // Check if AI is enabled via backend
+    fetch("/api/config")
+      .then(res => res.json())
+      .then(data => setHasApiKey(data.aiEnabled))
+      .catch(() => setHasApiKey(false));
   }, []);
 
   const loadData = async () => {

@@ -12,7 +12,7 @@ import {
 import { format, eachDayOfInterval, isSameDay, subMonths, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useUnit } from "../contexts/UnitContext";
-import { GoogleGenAI } from "@google/genai";
+import { generateAIResponse, isAIEnabled } from "../lib/ai";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -207,15 +207,13 @@ export default function Reports({ user }: { user: any }) {
   };
 
   const generateAIStrategicAnalysis = async () => {
-    const key = process.env.GEMINI_API_KEY;
-    if (!data || !key || key === "undefined" || key === "") {
-       alert("A chave GEMINI_API_KEY não foi configurada. Não é possível gerar análise por IA.");
-       return;
-    }
-    
     setGeneratingAI(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: key });
+      const aiEnabled = await isAIEnabled();
+      if (!aiEnabled) {
+        alert("O serviço de Inteligência Artificial não está configurado. Por favor, verifique as chaves de API.");
+        return;
+      }
 
       const contextData = {
         totalAtendimentos: data.stats.totalAppointments,
@@ -240,24 +238,11 @@ export default function Reports({ user }: { user: any }) {
         Responda APENAS o JSON válido.
       `;
 
-      const result = await ai.models.generateContent({
-        model: "gemini-flash-latest",
-        contents: prompt
-      });
-      
-      let text = result.text;
-      
-      if (text.includes("```json")) {
-        text = text.split("```json")[1].split("```")[0];
-      } else if (text.includes("```")) {
-        text = text.split("```")[1].split("```")[0];
-      }
-
-      const analysis = JSON.parse(text);
+      const analysis = await generateAIResponse(prompt, { jsonMode: true });
       setAiAnalysis(analysis);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro AI:", err);
-      alert("Não foi possível gerar a análise por IA neste momento.");
+      alert(err.message || "Não foi possível gerar a análise por IA neste momento.");
     } finally {
       setGeneratingAI(false);
     }
