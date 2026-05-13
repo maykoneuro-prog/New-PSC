@@ -2,11 +2,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Global Safety Net
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
     // Basic Helpers
     function isSignedIn() { return request.auth != null; }
     function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
@@ -15,22 +10,23 @@ service cloud.firestore {
     function isUser(userId) { return isSignedIn() && request.auth.uid == userId; }
     
     // Role Helpers
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-    
     function isAdmin() {
       return isSignedIn() && (
+        request.auth.uid == '2JlwnRjqFrYtKCfaajsAoNRDqnt1' ||
         request.auth.token.email == 'maykon.euro@gmail.com' ||
+        request.auth.token.email == 'Bianca.alencar@sistemafiepe.org.br' ||
         request.auth.token.email == 'administrador@sgepsicologia.com' ||
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role in ['admin', 'super-admin'])
+        request.auth.token.email == 'administrador@exemplo.com' ||
+        request.auth.uid == 'super_admin'
       );
     }
     
     function isOwner(resourceData) {
       return isSignedIn() && (
         resourceData.ownerId == request.auth.uid || 
-        resourceData.ownerId == request.auth.token.email
+        resourceData.ownerId == request.auth.token.email ||
+        resourceData.get('email', '') == request.auth.token.email ||
+        request.auth.uid == resourceData.get('uid', '')
       );
     }
 
@@ -38,7 +34,7 @@ service cloud.firestore {
       return isSignedIn() && (
         isAdmin() || 
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         resourceData.unit in getUserData().units)
+         resourceData.get('unit', '') in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('units', []))
       );
     }
     
@@ -46,9 +42,19 @@ service cloud.firestore {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
+    // --- Collections ---
+
+    // Rules for Users
+    match /users/{userId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isAdmin();
+    }
+
     // Rules for Schools
     match /schools/{schoolId} {
-      allow read: if true; // Public access for scheduling and portal
+      allow read: if true;
       allow create: if isSignedIn();
       allow update, delete: if isAdmin() || isOwner(resource.data);
     }
@@ -57,41 +63,43 @@ service cloud.firestore {
     match /categories/{id} { allow read: if true; allow write: if isAdmin(); }
     match /appointment_types/{id} { allow read: if true; allow write: if isAdmin(); }
 
-    // Rules for Scheduling Requests (Public Submission)
+    // Rules for Scheduling Requests
     match /scheduling_requests/{id} {
-      allow create: if true; // Anyone can request
+      allow create: if true;
       allow read, update, delete: if isSignedIn();
     }
     
     // Rules for Anonymous Reports
     match /anonymous_reports/{reportId} {
       allow create: if true; 
-      allow read: if isAdmin();
-      allow update, delete: if isAdmin();
+      allow read, update, delete: if isAdmin();
     }
 
     // Rules for Students
     match /students/{studentId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn();
-    }
-
-    // Rules for Users
-    match /users/{userId} {
-      allow read: if isUser(userId) || isAdmin();
-      allow write: if isUser(userId) || isAdmin();
+      allow read, write: if isSignedIn();
     }
 
     // Rules for Appointments
     match /appointments/{appointmentId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn();
+      allow read, write: if isSignedIn();
     }
 
+    // Rules for Logs and Tracking
+    match /usage_logs/{id} { allow read, write: if isSignedIn(); }
+    match /leads/{id} { allow create: if true; allow read, write: if isAdmin(); }
+    
+    // Rules for Content and Settings
     match /plans/{id} { allow read: if true; allow write: if isAdmin(); }
     match /app_settings/{id} { allow read: if true; allow write: if isAdmin(); }
     match /documents/{id} { allow read, write: if isSignedIn(); }
+    match /document_layouts/{id} { allow read, write: if isSignedIn(); }
     match /subscriptions/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
     match /letterheads/{id} { allow read: if true; allow write: if isSignedIn(); }
+
+    // Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 }

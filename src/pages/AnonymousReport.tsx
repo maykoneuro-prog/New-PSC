@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
+import { generateAIResponse } from "../lib/ai";
 import { ShieldAlert, Send, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { auth } from "../firebase";
 
@@ -40,15 +41,17 @@ export default function AnonymousReport() {
     let aiData = { level: 'PENDENTE', isEmergency: false, category: 'outro' };
 
     try {
-      // AI Analysis via Backend
-      const response = await fetch('/api/analyze-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message })
-      });
+      // AI Analysis via Frontend
+      const prompt = `Analise este relato escolar anônimo: "${message}". Classifique o relato conforme as regras: 
+      - CRÍTICO: Risco imediato à vida ou integridade física grave. 
+      - MODERADO: Bullying persistente, brigas frequentes, comportamento preocupante. 
+      - NORMAL: Reclamações comuns, relatos sem urgência.
       
-      if (response.ok) {
-        aiData = await response.json();
+      Retorne um JSON com: { "level": "CRÍTICO" | "MODERADO" | "NORMAL", "isEmergency": boolean, "category": string }`;
+
+      const aiResponse = await generateAIResponse(prompt, { jsonMode: true });
+      if (aiResponse) {
+        aiData = aiResponse;
       }
     } catch (err) {
       console.error("AI Analysis failed:", err);

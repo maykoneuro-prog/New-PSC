@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../lib/api";
+import { isAIEnabled } from "../lib/ai";
 import { ShieldAlert, Trash2, CheckCircle2, Phone, Filter, Search, Calendar } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -17,11 +18,8 @@ export default function AnonymousReportsManagement() {
 
   useEffect(() => {
     loadData();
-    // Check if AI is enabled via backend
-    fetch("/api/config")
-      .then(res => res.json())
-      .then(data => setHasApiKey(data.aiEnabled))
-      .catch(() => setHasApiKey(false));
+    // Check if AI is enabled via frontend env
+    isAIEnabled().then(setHasApiKey);
   }, []);
 
   const loadData = async () => {

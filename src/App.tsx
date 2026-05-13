@@ -623,27 +623,75 @@ const Login = ({ onLogin }: any) => {
         onLogin(userData);
         navigate("/");
       } else {
-        // Create initial Firestore Profile for super admins if missing
-        if (email === "administrador" || email === "maykon.euro@gmail.com") {
+        // Create initial Firestore Profile for specific admins if missing
+        const authorizedEmails = [
+          "administrador", 
+          "maykon.euro@gmail.com", 
+          "Bianca.alencar@sistemafiepe.org.br",
+          "administrador@sgepsicologia.com"
+        ];
+
+        if (authorizedEmails.includes(email) || authorizedEmails.includes(firebaseUser.email || "")) {
+          const baseName = email === "Bianca.alencar@sistemafiepe.org.br" ? "Bianca Moura" : "Super Administrador";
           const superAdmin = { 
-            name: "Super Administrador", 
+            name: baseName, 
             role: "admin", 
             email: firebaseUser.email,
             units: ['ADMINISTRAÇÃO CENTRAL'],
-            permissions: ['dashboard', 'students', 'import_students', 'appointments', 'documents', 'reports', 'settings', 'admin'],
+            permissions: ['dashboard', 'students', 'import_students', 'appointments', 'documents', 'reports', 'settings', 'admin', 'psychological_listening', 'scheduling_requests', 'schools'],
             status: 'active',
             createdAt: new Date().toISOString()
           };
           
-          const docRef = await (api.users as any).create(superAdmin, firebaseUser.uid);
-          onLogin({ id: docRef.id, ...superAdmin });
-          navigate("/");
+          try {
+            const docRef = await (api.users as any).create(superAdmin, firebaseUser.uid);
+            onLogin({ id: docRef.id, ...superAdmin });
+            navigate("/");
+          } catch (createErr: any) {
+             console.error("Error creating super admin profile:", createErr);
+             setError("Erro ao criar perfil administrativo no banco de dados. " + createErr.message);
+          }
         } else {
           setError("Perfil de usuário não encontrado.");
         }
       }
     } catch (err: any) {
       console.error("Login Error:", err);
+      
+      // Auto-register feature for specifically authorized emails if not found in Auth
+      const authorizedEmails = [
+        "Bianca.alencar@sistemafiepe.org.br",
+        "administrador@sgepsicologia.com"
+      ];
+      
+      if ((err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') && authorizedEmails.includes(email)) {
+          try {
+            const newUserCred = await createUserWithEmailAndPassword(auth, formattedEmail, password);
+            const firebaseUser = newUserCred.user;
+            
+            const baseName = email === "Bianca.alencar@sistemafiepe.org.br" ? "Bianca Moura" : "Administrador";
+            const newAdmin = { 
+              name: baseName, 
+              role: "admin", 
+              email: firebaseUser.email,
+              units: ['ADMINISTRAÇÃO CENTRAL'],
+              permissions: ['dashboard', 'students', 'import_students', 'appointments', 'documents', 'reports', 'settings', 'admin', 'psychological_listening', 'scheduling_requests', 'schools'],
+              status: 'active',
+              createdAt: new Date().toISOString()
+            };
+            
+            const docRef = await (api.users as any).create(newAdmin, firebaseUser.uid);
+            onLogin({ id: docRef.id, ...newAdmin });
+            navigate("/");
+            return;
+          } catch (regErr: any) {
+            console.error("Auto-registration error:", regErr);
+            setError("Falha no primeiro acesso: " + regErr.message);
+            setLoading(false);
+            return;
+          }
+      }
+
       if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         setError("E-mail ou senha incorretos.");
       } else if (err.code === 'auth/invalid-email') {
