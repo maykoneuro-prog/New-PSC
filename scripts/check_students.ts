@@ -6,7 +6,7 @@ import fs from 'fs';
 const firebaseConfig = JSON.parse(fs.readFileSync('./firebase-applet-config.json', 'utf8'));
 
 const app = initializeApp(firebaseConfig);
-const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+const db = getFirestore(app, "sge-sesi");
 
 async function checkStudents() {
   console.log("Attempting to create a test student...");

@@ -192,6 +192,77 @@ export const generateDocumentPDF = async (doc: any, layout?: any, letterhead?: a
         { text: doc.professionalCouncil || '', alignment: 'center', style: 'small' }
       );
     }
+  } else if (type === 'aee_register') {
+    content.push(
+      { text: `ALUNO: ${studentName || '____________________'}`, style: 'field', bold: true },
+      { text: `RA: ${studentRa || '__________'}`, fontSize: 10, margin: [0, 2] },
+      { text: `TURMA: ${studentClass || '__________'}`, fontSize: 10, margin: [0, 2] },
+      { text: `ESCOLA: ${studentSchool || '__________'}`, fontSize: 10, margin: [0, 2, 0, 10] },
+      { text: `DATA: ${date ? format(new Date(date), 'dd/MM/yyyy HH:mm') : '--/--/----'}`, style: 'field', margin: [0, 0, 0, 20] as [number, number, number, number] },
+
+      { text: '1. CARACTERIZAÇÃO DO ATENDIMENTO', style: 'sectionHeader' },
+      { text: `Tipo de atendimento: ${(data?.tipoAtendimento || []).join(', ') || 'Não informado'}`, fontSize: 10, margin: [0, 5, 0, 15] },
+
+      { text: '2. ORIGEM DA DEMANDA', style: 'sectionHeader' },
+      { 
+        text: `Encaminhamento realizado por: ${[
+          ...(data?.origemDemanda || []).filter((x: string) => x !== 'Outros'),
+          ((data?.origemDemanda || []).includes('Outros') && data?.origemDemandaOutros) ? `Outros: ${data.origemDemandaOutros}` : ''
+        ].filter(Boolean).join(', ') || 'Não informado'}`, 
+        fontSize: 10, margin: [0, 5, 0, 15] 
+      },
+
+      { text: '3. TIPO DE DEMANDA APRESENTADA', style: 'sectionHeader' },
+      { 
+        text: `Demandas: ${[
+          ...(data?.tipoDemanda || []).filter((x: string) => x !== 'Outros' && x !== 'Outos'),
+          (((data?.tipoDemanda || []).includes('Outros') || (data?.tipoDemanda || []).includes('Outos')) && data?.tipoDemandaOutros) ? `Outros: ${data.tipoDemandaOutros}` : ''
+        ].filter(Boolean).join(', ') || 'Não informado'}`, 
+        fontSize: 10, margin: [0, 5, 0, 15] 
+      },
+
+      { text: '4. DESCRIÇÃO DO ATENDIMENTO', style: 'sectionHeader' },
+      { text: data?.descricaoAtendimento || 'Nenhuma descrição detalhada registrada.', fontSize: 10, margin: [0, 5, 0, 15], alignment: 'justify' },
+
+      { text: '5. OBSERVAÇÕES TÉCNICAS', style: 'sectionHeader' },
+      { text: data?.observacoesTecnicas || 'Nenhuma observação técnica registrada.', fontSize: 10, margin: [0, 5, 0, 15], alignment: 'justify' },
+
+      { text: '6. INTERVENÇÕES REALIZADAS', style: 'sectionHeader' },
+      { 
+        text: `Intervenções: ${[
+          ...(data?.intervencoesRealizadas || []).filter((x: string) => x !== 'Outros'),
+          ((data?.intervencoesRealizadas || []).includes('Outros') && data?.intervencoesRealizadasOutros) ? `Outros: ${data.intervencoesRealizadasOutros}` : ''
+        ].filter(Boolean).join(', ') || 'Nenhuma registrada'}`, 
+        fontSize: 10, margin: [0, 5, 0, 5] 
+      },
+      data?.descricaoComplementar ? { text: `Descrição complementar: ${data.descricaoComplementar}`, fontSize: 10, margin: [0, 5, 0, 15] } : { text: '', margin: [0, 0, 0, 10] },
+
+      { text: '7. ENCAMINHAMENTOS', style: 'sectionHeader' },
+      { 
+        text: `Encaminhamentos: ${[
+          ...(data?.encaminhamentos || []).filter((x: string) => x !== 'Outros'),
+          ((data?.encaminhamentos || []).includes('Outros') && data?.encaminhamentosOutros) ? `Outros: ${data.encaminhamentosOutros}` : ''
+        ].filter(Boolean).join(', ') || 'Não informado'}`, 
+        fontSize: 10, margin: [0, 5, 0, 5] 
+      },
+      data?.descricaoEncaminhamento ? { text: `Descrição dos encaminhamentos: ${data.descricaoEncaminhamento}`, fontSize: 10, margin: [0, 5, 0, 15] } : { text: '', margin: [0, 0, 0, 10] },
+
+      { text: '8. ANEXOS', style: 'sectionHeader' },
+      { 
+        text: `Anexos: ${[
+          ...(data?.anexos || []).filter((x: string) => x !== 'Outros'),
+          ((data?.anexos || []).includes('Outros') && data?.anexosOutros) ? `Outros: ${data.anexosOutros}` : ''
+        ].filter(Boolean).join(', ') || 'Nenhum anexo registrado'}`, 
+        fontSize: 10, margin: [0, 5, 0, 5] 
+      },
+      data?.observacoesAnexos ? { text: `Observações adicionais: ${data.observacoesAnexos}`, fontSize: 10, margin: [0, 5, 0, 15] } : { text: '', margin: [0, 0, 0, 10] }
+    );
+
+    content.push(
+      { text: '\n\n__________________________________________', alignment: 'center' },
+      { text: data?.responsavel || doc.professionalName || 'Responsável pelo Atendimento AEE', alignment: 'center', bold: true, fontSize: 10 },
+      { text: 'Atendimento Educacional Especializado (AEE) - SESI/PE', alignment: 'center', style: 'small' }
+    );
   } else if (type === 'authorization_term') {
     content.push(
       { text: `ALUNO: ${studentName || '____________________'}`, style: 'field', bold: true },

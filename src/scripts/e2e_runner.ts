@@ -28,7 +28,7 @@ const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+const db = getFirestore(app, "sge-sesi");
 
 // Import API but we need to make sure it uses the same auth/db instances
 // Since api.ts imports from '../firebase', we might need to be careful.

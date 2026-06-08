@@ -34,7 +34,7 @@ export default function Settings() {
                     user?.email?.toLowerCase() === 'administrador@sgepsicologia.com' ||
                     user?.role === 'admin' || user?.role === 'super-admin';
                     
-    setIsTrial((user?.planId === 'trial' || user?.isTrial) && !isSuper);
+    setIsTrial(false);
     loadData();
   }, []);
 
@@ -77,10 +77,6 @@ export default function Settings() {
 
   const handleAddLetterhead = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isTrial && letterheads.length >= 1 && !editingLetterhead) {
-      alert("No seu teste grátis você pode cadastrar apenas 1 timbrado.");
-      return;
-    }
     try {
       setSaving(true);
       if (editingLetterhead) {

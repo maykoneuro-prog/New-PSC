@@ -35,6 +35,7 @@ import AnonymousReport from "./pages/AnonymousReport";
 import AnonymousReportsManagement from "./pages/AnonymousReportsManagement";
 import Profile from "./pages/Profile";
 import SaaSPlans from "./pages/SaaSPlans";
+import AtendimentoAee from "./pages/AtendimentoAee";
 
 // --- Error Boundary ---
 class ErrorBoundary extends Component<any, any> {
@@ -289,6 +290,7 @@ const Layout = ({ children, user, onLogout }: any) => {
         { icon: <Calendar size={18} />, label: 'Agenda', path: '/atendimentos', permission: 'appointments' },
         { icon: <ClipboardList size={18} />, label: 'Solicitações', path: '/solicitacoes', permission: 'scheduling_requests' },
         { icon: <FileText size={18} />, label: 'Registros', path: '/documentos', permission: 'documents' },
+        { icon: <ClipboardCheck size={18} />, label: 'Atendimento AEE', path: '/atendimento-aee', permission: 'documents' },
         { icon: <ShieldAlert size={18} />, label: 'Denúncias', path: '/gestao-denuncias', permission: 'psychological_listening' },
       ]
     },
@@ -308,9 +310,7 @@ const Layout = ({ children, user, onLogout }: any) => {
       roles: ['admin', 'psychologist', 'aee', 'pedagogue'],
       items: [
         { icon: <SettingsIcon size={18} />, label: 'Sistema', path: '/configuracoes', permission: 'settings' },
-        { icon: <Zap size={18} />, label: 'Planos', path: '/planos', hiddenForTrial: false }, // Let them see plans to upgrade
         { icon: <Users size={18} />, label: 'Profissionais', path: '/admin', permission: 'admin', hiddenForTrial: true },
-        { icon: <HelpCircle size={18} />, label: 'Instruções', path: '/instrucoes' },
       ]
     }
   ];
@@ -319,11 +319,12 @@ const Layout = ({ children, user, onLogout }: any) => {
     .map(cat => ({
       ...cat,
       items: cat.items.filter(item => {
-        const isTrial = (user?.planId === 'trial' || user?.isTrial) && !isSuperUser(user);
+        const isTrial = false;
         if (isTrial && (item as any).hiddenForTrial) return false;
         
-        if (isSuperUser(user) || (user?.planId === 'trial' || user?.isTrial)) return true;
+        if (isSuperUser(user)) return true;
         if (!item.permission) return true; // Items without permission (like Instructions) are visible to all
+        if (user?.role === 'aee' && (item.path === '/atendimento-aee' || item.path === '/documentos' || item.path === '/alunos' || item.path === '/escolas')) return true;
         return user?.permissions?.includes(item.permission);
       })
     }))
@@ -623,75 +624,27 @@ const Login = ({ onLogin }: any) => {
         onLogin(userData);
         navigate("/");
       } else {
-        // Create initial Firestore Profile for specific admins if missing
-        const authorizedEmails = [
-          "administrador", 
-          "maykon.euro@gmail.com", 
-          "Bianca.alencar@sistemafiepe.org.br",
-          "administrador@sgepsicologia.com"
-        ];
-
-        if (authorizedEmails.includes(email) || authorizedEmails.includes(firebaseUser.email || "")) {
-          const baseName = email === "Bianca.alencar@sistemafiepe.org.br" ? "Bianca Moura" : "Super Administrador";
+        // Create initial Firestore Profile for super admins if missing
+        if (email === "administrador" || email === "maykon.euro@gmail.com") {
           const superAdmin = { 
-            name: baseName, 
+            name: "Super Administrador", 
             role: "admin", 
             email: firebaseUser.email,
             units: ['ADMINISTRAÇÃO CENTRAL'],
-            permissions: ['dashboard', 'students', 'import_students', 'appointments', 'documents', 'reports', 'settings', 'admin', 'psychological_listening', 'scheduling_requests', 'schools'],
+            permissions: ['dashboard', 'students', 'import_students', 'appointments', 'documents', 'reports', 'settings', 'admin'],
             status: 'active',
             createdAt: new Date().toISOString()
           };
           
-          try {
-            const docRef = await (api.users as any).create(superAdmin, firebaseUser.uid);
-            onLogin({ id: docRef.id, ...superAdmin });
-            navigate("/");
-          } catch (createErr: any) {
-             console.error("Error creating super admin profile:", createErr);
-             setError("Erro ao criar perfil administrativo no banco de dados. " + createErr.message);
-          }
+          const docRef = await (api.users as any).create(superAdmin, firebaseUser.uid);
+          onLogin({ id: docRef.id, ...superAdmin });
+          navigate("/");
         } else {
           setError("Perfil de usuário não encontrado.");
         }
       }
     } catch (err: any) {
       console.error("Login Error:", err);
-      
-      // Auto-register feature for specifically authorized emails if not found in Auth
-      const authorizedEmails = [
-        "Bianca.alencar@sistemafiepe.org.br",
-        "administrador@sgepsicologia.com"
-      ];
-      
-      if ((err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') && authorizedEmails.includes(email)) {
-          try {
-            const newUserCred = await createUserWithEmailAndPassword(auth, formattedEmail, password);
-            const firebaseUser = newUserCred.user;
-            
-            const baseName = email === "Bianca.alencar@sistemafiepe.org.br" ? "Bianca Moura" : "Administrador";
-            const newAdmin = { 
-              name: baseName, 
-              role: "admin", 
-              email: firebaseUser.email,
-              units: ['ADMINISTRAÇÃO CENTRAL'],
-              permissions: ['dashboard', 'students', 'import_students', 'appointments', 'documents', 'reports', 'settings', 'admin', 'psychological_listening', 'scheduling_requests', 'schools'],
-              status: 'active',
-              createdAt: new Date().toISOString()
-            };
-            
-            const docRef = await (api.users as any).create(newAdmin, firebaseUser.uid);
-            onLogin({ id: docRef.id, ...newAdmin });
-            navigate("/");
-            return;
-          } catch (regErr: any) {
-            console.error("Auto-registration error:", regErr);
-            setError("Falha no primeiro acesso: " + regErr.message);
-            setLoading(false);
-            return;
-          }
-      }
-
       if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         setError("E-mail ou senha incorretos.");
       } else if (err.code === 'auth/invalid-email') {
@@ -978,8 +931,8 @@ const Dashboard = ({ user }: { user: any }) => {
   const [schools, setSchools] = useState<any[]>([]);
   const [usage, setUsage] = useState<any>(null);
 
-  const isTrial = (user?.planId === 'trial' || user?.isTrial) && !isSuperUser(user);
-  const trialDaysLeft = user?.expiresAt ? Math.max(0, Math.ceil((new Date(user.expiresAt).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))) : 0;
+  const isTrial = false;
+  const trialDaysLeft = 0;
 
   useEffect(() => {
     const loadStats = async () => {
@@ -1028,7 +981,7 @@ const Dashboard = ({ user }: { user: any }) => {
           usageService.getSubscriptionStatus(activeUnit, (!isSuperAdmin) ? (user.id || user.uid) : undefined)
         ]);
         
-        setUsage(usageStatus);
+        setUsage(null);
         
         // Internal filter for visual items
         const filterByUnit = (item: any) => {
@@ -1307,15 +1260,15 @@ const Dashboard = ({ user }: { user: any }) => {
              <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:scale-110 group-hover:-rotate-6 transition-all duration-500">
               <Zap size={80} className="text-purple-500" />
             </div>
-            <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Uso de Franquia</p>
+            <p className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Total de Atendimentos</p>
             <div className="flex items-baseline gap-2">
-              <p className="text-4xl font-black text-purple-600 tabular-nums tracking-tighter">{usage?.current || 0}</p>
-              <span className="text-xs font-black text-slate-400 uppercase">/ {usage?.limit || 40}</span>
+              <p className="text-4xl font-black text-purple-600 tabular-nums tracking-tighter">{stats.appointments}</p>
+              <span className="text-xs font-black text-slate-400 uppercase">/ ILIMITADO</span>
             </div>
             <div className="mt-4 w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
                <div 
-                 className={`h-full rounded-full transition-all duration-1000 ${usage?.percentage >= 90 ? 'bg-pedagogic-rose' : usage?.percentage >= 70 ? 'bg-pedagogic-amber' : 'bg-purple-500'}`}
-                 style={{ width: `${Math.min(usage?.percentage || 0, 100)}%` }}
+                 className="h-full rounded-full bg-purple-500"
+                 style={{ width: "100%" }}
                ></div>
             </div>
           </motion.div>
@@ -1719,7 +1672,7 @@ function AppContent() {
             } />
 
             <Route path="/alunos" element={
-              (user?.permissions?.includes('students') || isSuperUser(user)) ? (
+              (user?.permissions?.includes('students') || user?.role === 'aee' || isSuperUser(user)) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <Students user={user} />
                 </Layout>
@@ -1742,8 +1695,16 @@ function AppContent() {
               ) : user ? <Navigate to="/" /> : <Navigate to="/login" />
             } />
 
+            <Route path="/atendimento-aee" element={
+              (user?.permissions?.includes('documents') || user?.permissions?.includes('aee_records') || user?.role === 'aee' || isSuperUser(user)) ? (
+                <Layout user={user} onLogout={handleLogout}>
+                  <AtendimentoAee user={user} />
+                </Layout>
+              ) : user ? <Navigate to="/" /> : <Navigate to="/login" />
+            } />
+
             <Route path="/documentos" element={
-              (user?.permissions?.includes('documents') || isSuperUser(user)) ? (
+              (user?.permissions?.includes('documents') || user?.role === 'aee' || isSuperUser(user)) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <Documents user={user} />
                 </Layout>
@@ -1759,7 +1720,7 @@ function AppContent() {
             } />
 
             <Route path="/escolas" element={
-              (user?.permissions?.includes('schools') || isSuperUser(user)) ? (
+              (user?.permissions?.includes('schools') || user?.role === 'aee' || isSuperUser(user)) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <Schools user={user} />
                 </Layout>

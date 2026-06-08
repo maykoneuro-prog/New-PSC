@@ -2,20 +2,10 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
-import * as admin from "firebase-admin";
-import { getFirestore } from "firebase-admin/firestore";
-import fs from "fs";
+import { GoogleGenAI } from "@google/genai";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Initialize Firebase Admin
-const firebaseConfig = JSON.parse(fs.readFileSync(path.join(process.cwd(), "firebase-applet-config.json"), "utf8"));
-if (!admin.apps.length) {
-  admin.initializeApp({
-    projectId: firebaseConfig.projectId,
-  });
-}
 
 async function startServer() {
   const app = express();
@@ -28,61 +18,102 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
-  // Bootstrap User Route (requested for Bianca Moura)
-  app.post("/api/bootstrap-user", async (req, res) => {
+  // Config Check for Frontend
+  app.get("/api/config", (req, res) => {
+    res.json({ 
+      aiEnabled: !!process.env.GEMINI_API_KEY 
+    });
+  });
+
+  // Generic AI Generation Route
+  app.post("/api/ai/generate", async (req, res) => {
     try {
-      const { email, password, name, role = "psychologist", units = ["ADMINISTRAÇÃO CENTRAL"] } = req.body;
-      
-      if (!email || !password || !name) {
-        return res.status(400).json({ error: "Email, password and name are required" });
+      const { prompt, model: modelName = "gemini-3.5-flash", jsonMode = false } = req.body;
+      const apiKey = process.env.GEMINI_API_KEY;
+
+      if (!apiKey) {
+        console.warn("GEMINI_API_KEY not found in environment");
+        return res.status(503).json({ error: "AI service not configured" });
       }
 
-      console.log(`[Bootstrap] Creating user: ${email}`);
-
-      // 1. Create in Firebase Auth
-      let authUser;
-      try {
-        authUser = await admin.auth().getUserByEmail(email);
-        console.log(`[Bootstrap] User already exists in Auth: ${authUser.uid}`);
-      } catch (err: any) {
-        if (err.code === 'auth/user-not-found') {
-          authUser = await admin.auth().createUser({
-            email,
-            password,
-            displayName: name,
-          });
-          console.log(`[Bootstrap] User created in Auth: ${authUser.uid}`);
-        } else {
-          throw err;
+      const ai = new GoogleGenAI({ 
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
         }
+      });
+      const response = await ai.models.generateContent({
+        model: modelName === "gemini-3-flash-preview" ? "gemini-3.5-flash" : modelName,
+        contents: prompt,
+        config: jsonMode ? { responseMimeType: "application/json" } : undefined
+      });
+
+      const text = response.text || "";
+      
+      if (jsonMode) {
+        try {
+          let cleanText = text;
+          // Attempt to parse just in case it returned a code block
+          if (cleanText.includes("```json")) {
+            cleanText = cleanText.split("```json")[1].split("```")[0];
+          } else if (cleanText.includes("```")) {
+            cleanText = cleanText.split("```")[1].split("```")[0];
+          }
+          res.json(JSON.parse(cleanText));
+        } catch (e) {
+          res.json({ result: text });
+        }
+      } else {
+        res.json({ result: text });
+      }
+    } catch (error: any) {
+      console.error("AI Generation Error:", error);
+      res.status(500).json({ error: error.message || "Internal AI Error" });
+    }
+  });
+
+  // AI Analysis Route (Legacy simplified route)
+  app.post("/api/analyze-report", async (req, res) => {
+    try {
+      const { message } = req.body;
+      const apiKey = process.env.GEMINI_API_KEY;
+
+      if (!apiKey) {
+        console.warn("GEMINI_API_KEY not found in environment");
+        return res.json({ level: 'PENDENTE', isEmergency: false, category: 'outro' });
       }
 
-      // 2. Create in Firestore
-      const db = getFirestore(firebaseConfig.firestoreDatabaseId);
-      const userRef = db.collection("users").doc(authUser.uid);
-      
-      const userData = {
-        name,
-        email,
-        role,
-        status: "active",
-        units,
-        permissions: ['dashboard', 'reports', 'appointments', 'scheduling_requests', 'documents', 'psychological_listening', 'instructions', 'settings', 'students', 'schools'],
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        planId: "professional"
-      };
-
-      await userRef.set(userData, { merge: true });
-      console.log(`[Bootstrap] Firestore profile created/updated for ${authUser.uid}`);
-
-      res.json({ 
-        message: "User bootstrapped successfully", 
-        uid: authUser.uid,
-        email: email
+      const ai = new GoogleGenAI({ 
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
       });
-    } catch (error: any) {
-      console.error("Bootstrap error:", error);
-      res.status(500).json({ error: error.message || String(error) });
+      
+      const prompt = `Analise este relato escolar anônimo: "${message}". Classifique o relato conforme as regras: 
+      - CRÍTICO: Risco imediato à vida ou integridade física grave. 
+      - MODERADO: Bullying persistente, brigas frequentes, comportamento preocupante. 
+      - NORMAL: Reclamações comuns, relatos sem urgência.
+      
+      Retorne um JSON com: { "level": "CRÍTICO" | "MODERADO" | "NORMAL", "isEmergency": boolean, "category": string }`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+        }
+      });
+      
+      const text = response.text || "{}";
+      res.json(JSON.parse(text));
+    } catch (error) {
+      console.error("AI Analysis Error:", error);
+      res.json({ level: 'PENDENTE', isEmergency: false, category: 'outro' });
     }
   });
 

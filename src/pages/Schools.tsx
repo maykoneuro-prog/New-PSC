@@ -16,7 +16,7 @@ export default function Schools({ user }: { user: any }) {
                   user?.role === 'admin' || user?.role === 'super-admin' ||
                   user?.id === 'super_admin';
   const isFullAdmin = isSuper;
-  const isTrial = (user?.planId === 'trial' || user?.isTrial) && !isSuper;
+  const isTrial = false;
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
   const [selectedSchoolForQR, setSelectedSchoolForQR] = useState<any>(null);
@@ -67,10 +67,6 @@ export default function Schools({ user }: { user: any }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isTrial && !editingSchool && schools.length >= 1) {
-      alert("No seu teste grátis você pode cadastrar apenas 1 unidade escolar.");
-      return;
-    }
     try {
       const unitName = (formData.unit || formData.name).trim().toUpperCase();
       const dataToSave = { ...formData, unit: unitName, name: formData.name.trim() };

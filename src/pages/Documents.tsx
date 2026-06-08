@@ -16,10 +16,17 @@ const DOCUMENT_TYPES = [
   { id: 'referral', name: 'Encaminhamento', icon: <ChevronRight size={20} /> },
   { id: 'attendance_declaration', name: 'Declaração de Comparecimento', icon: <FileCheck size={20} /> },
   { id: 'authorization_term', name: 'Termo de Autorização', icon: <FileSignature size={20} /> },
+  { id: 'aee_register', name: 'Registro AEE', icon: <ClipboardCheck size={20} /> },
 ];
 
 export default function Documents({ user }: { user: any }) {
   const { activeUnit } = useUnit();
+  const getAvailableDocumentTypes = (u: any) => {
+    if (u?.role === 'aee') {
+      return DOCUMENT_TYPES.filter(type => type.id === 'aee_register');
+    }
+    return DOCUMENT_TYPES;
+  };
   const [documents, setDocuments] = useState<any[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [selectedType, setSelectedType] = useState<string | null>(null);
@@ -85,7 +92,11 @@ export default function Documents({ user }: { user: any }) {
           allowedUnits: user?.units || [] 
         })
       ]);
-      setDocuments(docs || []);
+      let fetchedDocs = docs || [];
+      if (user?.role === 'aee') {
+        fetchedDocs = fetchedDocs.filter((d: any) => d.type === 'aee_register');
+      }
+      setDocuments(fetchedDocs);
       setStudents(studs || []);
       setLetterheads(lheads || []);
       setDocumentLayouts(layouts || []);
@@ -210,7 +221,7 @@ export default function Documents({ user }: { user: any }) {
     );
   };
 
-  const groupedDocs = DOCUMENT_TYPES.map(type => ({
+  const groupedDocs = getAvailableDocumentTypes(user).map(type => ({
     ...type,
     docs: filteredDocs.filter(doc => doc.type === type.id)
   })).filter(group => group.docs.length > 0);
@@ -687,7 +698,7 @@ export default function Documents({ user }: { user: any }) {
 
             {!selectedType ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {DOCUMENT_TYPES.map((type) => (
+                {getAvailableDocumentTypes(user).map((type) => (
                   <button
                     key={type.id}
                     onClick={() => setSelectedType(type.id)}
@@ -791,6 +802,7 @@ export default function Documents({ user }: { user: any }) {
                 {selectedType === 'referral' && <ReferralForm formData={formData} setFormData={setFormData} />}
                 {selectedType === 'attendance_declaration' && <AttendanceDeclarationForm formData={formData} setFormData={setFormData} user={user} />}
                 {selectedType === 'authorization_term' && <AuthorizationTermForm formData={formData} setFormData={setFormData} />}
+                {selectedType === 'aee_register' && <AeeRegisterForm formData={formData} setFormData={setFormData} user={user} />}
 
                 <div className="flex justify-end gap-3 pt-6 border-t">
                   <button 
@@ -2417,6 +2429,438 @@ const StudentSelector = ({ students, schools, onSelect, selectedStudent, onRefre
           </div>
         )}
       </div>
+    </div>
+  );
+};
+
+const AeeRegisterForm = ({ formData, setFormData, user }: any) => {
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      
+      {/* 1. CARACTERIZAÇÃO DO ATENDIMENTO */}
+      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+        <h4 className="font-black text-sesi-blue text-xs uppercase tracking-[0.2em] flex items-center gap-2">
+          <span className="w-6 h-6 bg-sesi-blue text-white rounded-lg flex items-center justify-center text-[10px]">01</span>
+          Caracterização do Atendimento
+        </h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {[
+            { id: 'Atendimento individual', label: 'Atendimento individual' },
+            { id: 'Atendimento coletivo', label: 'Atendimento coletivo' },
+            { id: 'Atendimento com família', label: 'Atendimento com família' },
+            { id: 'Atendimento de suporte com equipe escolar', label: 'Atendimento de suporte com equipe escolar' },
+            { id: 'Atendimento a equipe externa', label: 'Atendimento a equipe externa' },
+          ].map(opt => (
+            <label key={opt.id} className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 cursor-pointer transition-all">
+              <input 
+                type="checkbox" 
+                className="mt-1 w-4 h-4 text-pedagogic-blue rounded border-gray-300"
+                checked={formData.tipoAtendimento?.includes(opt.id) || false}
+                onChange={() => {
+                  const list = formData.tipoAtendimento || [];
+                  setFormData({
+                    ...formData,
+                    tipoAtendimento: list.includes(opt.id) ? list.filter((x: string) => x !== opt.id) : [...list, opt.id]
+                  });
+                }}
+              />
+              <span className="text-sm font-medium text-gray-700">{opt.label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* 2. ORIGEM DA DEMANDA */}
+      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+        <h4 className="font-black text-sesi-blue text-xs uppercase tracking-[0.2em] flex items-center gap-2">
+          <span className="w-6 h-6 bg-sesi-blue text-white rounded-lg flex items-center justify-center text-[10px]">02</span>
+          Origem da Demanda
+        </h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {[
+            'Demanda espontânea do estudante',
+            'Família/Responsáveis',
+            'Professores',
+            'Coordenação pedagógica',
+            'Equipe escolar',
+            'Serviço externo'
+          ].map(opt => (
+            <label key={opt} className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 cursor-pointer transition-all">
+              <input 
+                type="checkbox" 
+                className="mt-1 w-4 h-4 text-pedagogic-blue rounded border-gray-300"
+                checked={formData.origemDemanda?.includes(opt) || false}
+                onChange={() => {
+                  const list = formData.origemDemanda || [];
+                  setFormData({
+                    ...formData,
+                    origemDemanda: list.includes(opt) ? list.filter((x: string) => x !== opt) : [...list, opt]
+                  });
+                }}
+              />
+              <span className="text-sm font-medium text-gray-700">{opt}</span>
+            </label>
+          ))}
+          
+          <div className="md:col-span-2 pt-2 border-t border-gray-100">
+            <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 cursor-pointer transition-all mb-2">
+              <input 
+                type="checkbox" 
+                className="w-4 h-4 text-pedagogic-blue rounded border-gray-300"
+                checked={formData.origemDemanda?.includes("Outros") || false}
+                onChange={() => {
+                  const list = formData.origemDemanda || [];
+                  setFormData({
+                    ...formData,
+                    origemDemanda: list.includes("Outros") ? list.filter((x: string) => x !== "Outros") : [...list, "Outros"]
+                  });
+                }}
+              />
+              <span className="text-sm font-medium text-gray-700">Outros</span>
+            </label>
+            <input 
+              type="text" 
+              disabled={!formData.origemDemanda?.includes("Outros")}
+              className="w-full px-4 py-2 bg-slate-50 border border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-pedagogic-blue outline-none text-sm disabled:opacity-50"
+              placeholder="Por favor, especifique o remetente..."
+              value={formData.origemDemandaOutros || ""}
+              onChange={(e) => setFormData({...formData, origemDemandaOutros: e.target.value})}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 3. TIPO DE DEMANDA APRESENTADA */}
+      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+        <h4 className="font-black text-sesi-blue text-xs uppercase tracking-[0.2em] flex items-center gap-2">
+          <span className="w-6 h-6 bg-sesi-blue text-white rounded-lg flex items-center justify-center text-[10px]">03</span>
+          Tipo de Demanda Apresentada
+        </h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {[
+            'Questões emocionais',
+            'Demandas socioemocionais',
+            'Ansiedade',
+            'Conflitos interpessoais',
+            'Bullying',
+            'Rotina/adaptação escolar',
+            'Dificuldades de aprendizagem',
+            'Questões familiares',
+            'Comportamento/agitação',
+            'Baixa autoestima',
+            'Autolesão',
+            'Crise emocional',
+            'Inclusão escolar',
+            'Suspeita de transtorno do neurodesenvolvimento'
+          ].map(opt => (
+            <label key={opt} className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 cursor-pointer transition-all">
+              <input 
+                type="checkbox" 
+                className="mt-1 w-4 h-4 text-pedagogic-blue rounded border-gray-300"
+                checked={formData.tipoDemanda?.includes(opt) || false}
+                onChange={() => {
+                  const list = formData.tipoDemanda || [];
+                  setFormData({
+                    ...formData,
+                    tipoDemanda: list.includes(opt) ? list.filter((x: string) => x !== opt) : [...list, opt]
+                  });
+                }}
+              />
+              <span className="text-sm font-medium text-gray-700">{opt}</span>
+            </label>
+          ))}
+
+          <div className="md:col-span-2 pt-2 border-t border-gray-100">
+            <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 cursor-pointer transition-all mb-2">
+              <input 
+                type="checkbox" 
+                className="w-4 h-4 text-pedagogic-blue rounded border-gray-300"
+                checked={formData.tipoDemanda?.includes("Outos") || false}
+                onChange={() => {
+                  const list = formData.tipoDemanda || [];
+                  setFormData({
+                    ...formData,
+                    tipoDemanda: list.includes("Outos") ? list.filter((x: string) => x !== "Outos") : [...list, "Outos"]
+                  });
+                }}
+              />
+              <span className="text-sm font-medium text-gray-700">Outros</span>
+            </label>
+            <input 
+              type="text" 
+              disabled={!formData.tipoDemanda?.includes("Outos")}
+              className="w-full px-4 py-2 bg-slate-50 border border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-pedagogic-blue outline-none text-sm disabled:opacity-50"
+              placeholder="Especifique outros transtornos/demandas..."
+              value={formData.tipoDemandaOutros || ""}
+              onChange={(e) => setFormData({...formData, tipoDemandaOutros: e.target.value})}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 4. DESCRIÇÃO DO ATENDIMENTO */}
+      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-3">
+        <h4 className="font-black text-sesi-blue text-xs uppercase tracking-[0.2em] flex items-center gap-2">
+          <span className="w-6 h-6 bg-sesi-blue text-white rounded-lg flex items-center justify-center text-[10px]">04</span>
+          Descrição do Atendimento
+        </h4>
+        <textarea 
+          rows={4}
+          className="w-full p-4 bg-slate-50 border border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-pedagogic-blue outline-none text-sm font-medium text-gray-700"
+          placeholder="Relate detalhadamente os acontecimentos e procedimentos realizados no atendimento..."
+          value={formData.descricaoAtendimento || ""}
+          onChange={(e) => setFormData({...formData, descricaoAtendimento: e.target.value})}
+        />
+      </div>
+
+      {/* 5. OBSERVAÇÕES TÉCNICAS */}
+      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-3">
+        <h4 className="font-black text-sesi-blue text-xs uppercase tracking-[0.2em] flex items-center gap-2">
+          <span className="w-6 h-6 bg-sesi-blue text-white rounded-lg flex items-center justify-center text-[10px]">05</span>
+          Observações Técnicas de Acompanhamento
+        </h4>
+        <textarea 
+          rows={4}
+          className="w-full p-4 bg-slate-50 border border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-pedagogic-blue outline-none text-sm font-medium text-gray-700"
+          placeholder="Registre pareceres diagnósticos, evolução pedagógica ou observações psicopedagógicas..."
+          value={formData.observacoesTecnicas || ""}
+          onChange={(e) => setFormData({...formData, observacoesTecnicas: e.target.value})}
+        />
+      </div>
+
+      {/* 6. INTERVENÇÕES REALIZADAS */}
+      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+        <h4 className="font-black text-sesi-blue text-xs uppercase tracking-[0.2em] flex items-center gap-2">
+          <span className="w-6 h-6 bg-sesi-blue text-white rounded-lg flex items-center justify-center text-[10px]">06</span>
+          Intervenções Realizadas
+        </h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {[
+            'Escuta qualificada',
+            'Acolhimento emocional',
+            'Mediação de conflito',
+            'Orientação ao estudante',
+            'Orientação familiar',
+            'Articulação com equipe pedagógica',
+            'Estratégias de regulação emocional',
+            'Monitoramento escolar'
+          ].map(opt => (
+            <label key={opt} className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 cursor-pointer transition-all">
+              <input 
+                type="checkbox" 
+                className="mt-1 w-4 h-4 text-pedagogic-blue rounded border-gray-300"
+                checked={formData.intervencoesRealizadas?.includes(opt) || false}
+                onChange={() => {
+                  const list = formData.intervencoesRealizadas || [];
+                  setFormData({
+                    ...formData,
+                    intervencoesRealizadas: list.includes(opt) ? list.filter((x: string) => x !== opt) : [...list, opt]
+                  });
+                }}
+              />
+              <span className="text-sm font-medium text-gray-700">{opt}</span>
+            </label>
+          ))}
+          
+          <div className="md:col-span-2 pt-2 border-t border-gray-100 space-y-3">
+            <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 cursor-pointer transition-all">
+              <input 
+                type="checkbox" 
+                className="w-4 h-4 text-pedagogic-blue rounded border-gray-300"
+                checked={formData.intervencoesRealizadas?.includes("Outros") || false}
+                onChange={() => {
+                  const list = formData.intervencoesRealizadas || [];
+                  setFormData({
+                    ...formData,
+                    intervencoesRealizadas: list.includes("Outros") ? list.filter((x: string) => x !== "Outros") : [...list, "Outros"]
+                  });
+                }}
+              />
+              <span className="text-sm font-medium text-gray-700">Outros</span>
+            </label>
+            <input 
+              type="text" 
+              disabled={!formData.intervencoesRealizadas?.includes("Outros")}
+              className="w-full px-4 py-2 bg-slate-50 border border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-pedagogic-blue outline-none text-sm disabled:opacity-50"
+              placeholder="Especifique a intervenção secundária..."
+              value={formData.intervencoesRealizadasOutros || ""}
+              onChange={(e) => setFormData({...formData, intervencoesRealizadasOutros: e.target.value})}
+            />
+            
+            <div>
+              <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Descrição Complementar das Intervenções</label>
+              <textarea 
+                rows={3}
+                className="w-full p-4 bg-slate-50 border border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-pedagogic-blue outline-none text-sm font-medium text-gray-700"
+                placeholder="Fale mais profundamente sobre a reunião, direcionamentos ou acordos efetuados..."
+                value={formData.descricaoComplementar || ""}
+                onChange={(e) => setFormData({...formData, descricaoComplementar: e.target.value})}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 7. ENCAMINHAMENTOS */}
+      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+        <h4 className="font-black text-sesi-blue text-xs uppercase tracking-[0.2em] flex items-center gap-2">
+          <span className="w-6 h-6 bg-sesi-blue text-white rounded-lg flex items-center justify-center text-[10px]">07</span>
+          Encaminhamentos Efetivados
+        </h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {[
+            'Sem encaminhamento no momento',
+            'Encaminhamento ao serviço do AEE da unidade',
+            'Acompanhamento psicológico externo',
+            'Psiquiatria',
+            'Neurologia',
+            'Psicopedagogia',
+            'Assistência social',
+            'Reunião com família',
+            'Acompanhamento pedagógico',
+            'Rede de proteção'
+          ].map(opt => (
+            <label key={opt} className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 cursor-pointer transition-all">
+              <input 
+                type="checkbox" 
+                className="mt-1 w-4 h-4 text-pedagogic-blue rounded border-gray-300"
+                checked={formData.encaminhamentos?.includes(opt) || false}
+                onChange={() => {
+                  const list = formData.encaminhamentos || [];
+                  setFormData({
+                    ...formData,
+                    encaminhamentos: list.includes(opt) ? list.filter((x: string) => x !== opt) : [...list, opt]
+                  });
+                }}
+              />
+              <span className="text-sm font-medium text-gray-700">{opt}</span>
+            </label>
+          ))}
+          
+          <div className="md:col-span-2 pt-2 border-t border-gray-100 space-y-3">
+            <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 cursor-pointer transition-all">
+              <input 
+                type="checkbox" 
+                className="w-4 h-4 text-pedagogic-blue rounded border-gray-300"
+                checked={formData.encaminhamentos?.includes("Outros") || false}
+                onChange={() => {
+                  const list = formData.encaminhamentos || [];
+                  setFormData({
+                    ...formData,
+                    encaminhamentos: list.includes("Outros") ? list.filter((x: string) => x !== "Outros") : [...list, "Outros"]
+                  });
+                }}
+              />
+              <span className="text-sm font-medium text-gray-700">Outros</span>
+            </label>
+            <input 
+              type="text" 
+              disabled={!formData.encaminhamentos?.includes("Outros")}
+              className="w-full px-4 py-2 bg-slate-50 border border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-pedagogic-blue outline-none text-sm disabled:opacity-50"
+              placeholder="Especifique outros destinos..."
+              value={formData.encaminhamentosOutros || ""}
+              onChange={(e) => setFormData({...formData, encaminhamentosOutros: e.target.value})}
+            />
+            
+            <div>
+              <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Descrição Detalhada do Encaminhamento</label>
+              <textarea 
+                rows={3}
+                className="w-full p-4 bg-slate-50 border border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-pedagogic-blue outline-none text-sm font-medium text-gray-700"
+                placeholder="Descreva detalhes ou observações dos encaminhamentos..."
+                value={formData.descricaoEncaminhamento || ""}
+                onChange={(e) => setFormData({...formData, descricaoEncaminhamento: e.target.value})}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 8. ANEXOS */}
+      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+        <h4 className="font-black text-sesi-blue text-xs uppercase tracking-[0.2em] flex items-center gap-2">
+          <span className="w-6 h-6 bg-sesi-blue text-white rounded-lg flex items-center justify-center text-[10px]">08</span>
+          Anexos Registrados
+        </h4>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {[
+            'Relatório externo',
+            'Declaração',
+            'Registro pedagógico',
+            'Comunicação familiar'
+          ].map(opt => (
+            <label key={opt} className="flex items-start gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 cursor-pointer transition-all">
+              <input 
+                type="checkbox" 
+                className="mt-1 w-4 h-4 text-pedagogic-blue rounded border-gray-300"
+                checked={formData.anexos?.includes(opt) || false}
+                onChange={() => {
+                  const list = formData.anexos || [];
+                  setFormData({
+                    ...formData,
+                    anexos: list.includes(opt) ? list.filter((x: string) => x !== opt) : [...list, opt]
+                  });
+                }}
+              />
+              <span className="text-sm font-medium text-gray-700">{opt}</span>
+            </label>
+          ))}
+          
+          <div className="md:col-span-2 pt-2 border-t border-gray-100 space-y-3">
+            <label className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl hover:bg-slate-100 cursor-pointer transition-all">
+              <input 
+                type="checkbox" 
+                className="w-4 h-4 text-pedagogic-blue rounded border-gray-300"
+                checked={formData.anexos?.includes("Outros") || false}
+                onChange={() => {
+                  const list = formData.anexos || [];
+                  setFormData({
+                    ...formData,
+                    anexos: list.includes("Outros") ? list.filter((x: string) => x !== "Outros") : [...list, "Outros"]
+                  });
+                }}
+              />
+              <span className="text-sm font-medium text-gray-700">Outros</span>
+            </label>
+            <input 
+              type="text" 
+              disabled={!formData.anexos?.includes("Outros")}
+              className="w-full px-4 py-2 bg-slate-50 border border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-pedagogic-blue outline-none text-sm disabled:opacity-50"
+              placeholder="Especifique outros tipos de anexos..."
+              value={formData.anexosOutros || ""}
+              onChange={(e) => setFormData({...formData, anexosOutros: e.target.value})}
+            />
+            
+            <div>
+              <label className="block text-[10px] font-black uppercase text-gray-400 mb-1 ml-1">Observações Sobre Anexos</label>
+              <textarea 
+                rows={3}
+                className="w-full p-4 bg-slate-50 border border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-pedagogic-blue outline-none text-sm font-medium text-gray-700"
+                placeholder="Registros detalhados de documentos externos anexados de forma física ou virtual..."
+                value={formData.observacoesAnexos || ""}
+                onChange={(e) => setFormData({...formData, observacoesAnexos: e.target.value})}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 9. RESPONSÁVEL PELO ATENDIMENTO */}
+      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-3">
+        <h4 className="font-black text-sesi-blue text-xs uppercase tracking-[0.2em] flex items-center gap-2">
+          <span className="w-6 h-6 bg-sesi-blue text-white rounded-lg flex items-center justify-center text-[10px]">09</span>
+          Responsável pelo Atendimento
+        </h4>
+        <input 
+          type="text" 
+          required
+          className="w-full px-4 py-2.5 bg-slate-50 border border-transparent rounded-xl focus:bg-white focus:ring-2 focus:ring-pedagogic-blue outline-none text-sm font-semibold text-gray-700"
+          placeholder="Nome do profissional e conselho habilitante (se aplicável)"
+          value={formData.responsavel || ""}
+          onChange={(e) => setFormData({...formData, responsavel: e.target.value})}
+        />
+      </div>
+
     </div>
   );
 };

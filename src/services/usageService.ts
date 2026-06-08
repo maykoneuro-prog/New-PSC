@@ -90,90 +90,30 @@ export const usageService = {
 
   getSubscriptionStatus: async (unitId: string, professionalId?: string): Promise<UsageStatus | null> => {
     try {
-      const savedUser = localStorage.getItem("user");
-      const currentUser = savedUser ? JSON.parse(savedUser) : null;
-      
       const currentUsage = await usageService.getMonthlyUsage(unitId, professionalId);
-      const subscription = await api.subscriptions.getByUnit(unitId);
-      const plans = await api.plans.list();
-      
-      let limit = 40; // Default fallback to Basic Plan limit
-      let plan = null;
-
-      // Check if it's a trial user
-      if (currentUser?.planId === 'trial' || currentUser?.isTrial) {
-        // Use limits from user object or default to 10
-        limit = currentUser?.trialLimits?.appointments || 10;
-        const percentage = (currentUsage / limit) * 100;
-        const isExceeded = currentUsage >= limit;
-        
-        // Check time expiration
-        const now = new Date();
-        const expiresAt = currentUser.expiresAt ? new Date(currentUser.expiresAt) : null;
-        const isTimedOut = expiresAt && now > expiresAt;
-
-        // Force percentage to 0 if usage is 0, to avoid weird floating point or stale issues
-        const safePercentage = currentUsage <= 0 ? 0 : percentage;
-
-        return {
-          current: currentUsage,
-          limit,
-          percentage: safePercentage,
-          isSoftLimit: safePercentage >= 80 && safePercentage < 100,
-          isHardLimit: isExceeded || isTimedOut,
-          isExceeded: isExceeded || isTimedOut,
-          shouldBlock: isExceeded || isTimedOut,
-          message: isTimedOut 
-            ? "Seu período de teste grátis expirou (7 dias). Faça um upgrade para continuar." 
-            : isExceeded 
-              ? `Você atingiu o limite de ${limit} atendimentos do seu teste grátis. Faça um upgrade para continuar.`
-              : null
-        };
-      }
-
-      if (subscription) {
-        plan = plans?.find((p: any) => p.id === (subscription as any).planId) as Plan;
-        if (plan) {
-          limit = plan.limit;
-        }
-      } else {
-        // Find basic plan for default limits if subscription is missing
-        const basicPlan = plans?.find((p: any) => p.id === 'basic' || p.name?.toLowerCase().includes('básico')) as any;
-        if (basicPlan) limit = basicPlan.limit;
-      }
-
-      const percentage = (currentUsage / limit) * 100;
-      const isSoftLimit = percentage >= 80 && percentage < 100;
-      const isHardLimit = percentage >= 100;
-      const isExceeded = currentUsage > limit;
-      
-      let shouldBlock = false;
-      let message = null;
-
-      if (isExceeded) {
-        if (plan?.autoBlock && !plan?.allowOverage) {
-          shouldBlock = true;
-          message = "Seu plano atingiu o limite máximo e o serviço foi temporariamente pausado. Entre em contato para reativação ou upgrade.";
-        } else {
-          message = "Você atingiu o limite mensal de atendimentos do seu plano. Novos atendimentos poderão ser limitados ou tarifados como excedente.";
-        }
-      } else if (isSoftLimit) {
-        message = "Você está próximo do limite do seu plano. Para evitar interrupções, considere fazer um upgrade.";
-      }
 
       return {
         current: currentUsage,
-        limit,
-        percentage,
-        isSoftLimit,
-        isHardLimit,
-        isExceeded,
-        shouldBlock,
-        message
+        limit: 999999, // Unlimited display
+        percentage: 0,
+        isSoftLimit: false,
+        isHardLimit: false,
+        isExceeded: false,
+        shouldBlock: false,
+        message: null
       };
     } catch (error) {
       console.error("Error fetching subscription status:", error);
-      return null;
+      return {
+        current: 0,
+        limit: 999999,
+        percentage: 0,
+        isSoftLimit: false,
+        isHardLimit: false,
+        isExceeded: false,
+        shouldBlock: false,
+        message: null
+      };
     }
   },
 
@@ -187,16 +127,15 @@ export const usageService = {
   },
 
   checkAndExecuteAction: async (unitId: string, action: () => Promise<any>, actionName: string): Promise<any> => {
-    const status = await usageService.getSubscriptionStatus(unitId);
-    
-    if (status?.shouldBlock) {
-      throw new Error(status.message || "Uso excedido.");
-    }
-
+    // Plan use controls are retired, never block actions
     const result = await action();
     
     // Log success
-    await usageService.logUsage(unitId, actionName, "Sucesso");
+    try {
+      await usageService.logUsage(unitId, actionName, "Sucesso");
+    } catch (e) {
+      console.warn("Could not log usage:", e);
+    }
     
     return result;
   }

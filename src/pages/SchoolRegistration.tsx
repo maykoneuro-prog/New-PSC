@@ -23,19 +23,7 @@ export default function SchoolRegistration() {
 
   useEffect(() => {
     const checkLimit = async () => {
-      const savedUser = localStorage.getItem("user");
-      const user = savedUser ? JSON.parse(savedUser) : null;
-      
-      if (user?.planId === 'trial' || user?.isTrial) {
-        try {
-          const schools = await api.schools.list();
-          if (schools && schools.length >= 1) {
-            setLimitReached(true);
-          }
-        } catch (err) {
-          console.error("Error checking school limit:", err);
-        }
-      }
+      setLimitReached(false);
       setChecking(false);
     };
     checkLimit();

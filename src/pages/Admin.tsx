@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Check, X, ShieldAlert, Plus, Edit2, Trash2, Save, LayoutGrid, List, User, Mail, Briefcase, MapPin, Calendar as CalendarIcon, Zap, CreditCard, History, Clock, Download, Upload } from "lucide-react";
 import { api } from "../lib/api";
+import { registerUserOnSecondaryApp } from "../firebase";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -296,8 +297,23 @@ export default function Admin() {
         expiresAt: formData.expiresAt ? new Date(formData.expiresAt).toISOString() : null
       };
       if (editingUser) {
+        if (formData.password) {
+          try {
+            await registerUserOnSecondaryApp(dataToSave.email, formData.password);
+          } catch (authErr: any) {
+            if (authErr.code !== 'auth/email-already-in-use') {
+              console.warn("Could not register user on secondary auth during edit:", authErr);
+            }
+          }
+        }
         await api.users.update(editingUser.id, dataToSave);
       } else {
+        if (!formData.password) {
+          throw new Error("Uma senha é necessária para cadastrar e criar as credenciais de primeiro acesso.");
+        }
+        // Registra a credencial no Firebase Authentication primeiro
+        await registerUserOnSecondaryApp(dataToSave.email, formData.password);
+        // Depois cria o registro no Firestore
         await api.users.create(dataToSave);
       }
       setShowModal(false);
@@ -459,9 +475,7 @@ export default function Admin() {
             </button>
             <div className="flex p-1 bg-gray-100/50 backdrop-blur rounded-2xl border border-gray-200/50">
               {[
-                { id: "users", label: "Profissionais", icon: User },
-                { id: "plans", label: "Planos SaaS", icon: Zap },
-                { id: "subscriptions", label: "Uso Unitário", icon: CreditCard }
+                { id: "users", label: "Profissionais", icon: User }
               ].map((tab) => (
                 <button 
                   key={tab.id}

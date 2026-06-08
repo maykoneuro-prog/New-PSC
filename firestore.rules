@@ -14,7 +14,6 @@ service cloud.firestore {
       return isSignedIn() && (
         request.auth.uid == '2JlwnRjqFrYtKCfaajsAoNRDqnt1' ||
         request.auth.token.email == 'maykon.euro@gmail.com' ||
-        request.auth.token.email == 'Bianca.alencar@sistemafiepe.org.br' ||
         request.auth.token.email == 'administrador@sgepsicologia.com' ||
         request.auth.token.email == 'administrador@exemplo.com' ||
         request.auth.uid == 'super_admin'
@@ -25,8 +24,7 @@ service cloud.firestore {
       return isSignedIn() && (
         resourceData.ownerId == request.auth.uid || 
         resourceData.ownerId == request.auth.token.email ||
-        resourceData.get('email', '') == request.auth.token.email ||
-        request.auth.uid == resourceData.get('uid', '')
+        resourceData.get('email', '') == request.auth.token.email
       );
     }
 
@@ -46,10 +44,7 @@ service cloud.firestore {
 
     // Rules for Users
     match /users/{userId} {
-      allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow delete: if isAdmin();
+      allow read, write: if request.auth != null;
     }
 
     // Rules for Schools
