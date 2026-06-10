@@ -27,6 +27,19 @@ const ROLES = [
   { id: 'admin', label: 'Administrador' },
 ];
 
+const getDefaultPermissionsForRole = (role: string) => {
+  if (role === 'admin') {
+    return ['dashboard', 'students', 'import_students', 'appointments', 'documents', 'reports', 'schools', 'scheduling_requests', 'psychological_listening', 'bilingual', 'settings', 'admin'];
+  } else if (role === 'psychologist') {
+    return ['dashboard', 'students', 'appointments', 'documents', 'reports', 'schools', 'scheduling_requests', 'psychological_listening', 'bilingual'];
+  } else if (role === 'aee') {
+    return ['students', 'appointments', 'schools', 'documents'];
+  } else if (role === 'pedagogue') {
+    return ['dashboard', 'students', 'appointments', 'documents', 'reports', 'schools', 'scheduling_requests'];
+  }
+  return [];
+};
+
 export default function Admin() {
   const [users, setUsers] = useState([]);
   const [schools, setSchools] = useState<any[]>([]);
@@ -279,7 +292,7 @@ export default function Admin() {
         password: "",
         role: "psychologist",
         units: [],
-        permissions: [],
+        permissions: getDefaultPermissionsForRole("psychologist"),
         professionalCouncil: "",
         status: "active",
         expiresAt: ""
@@ -1024,7 +1037,14 @@ export default function Admin() {
                       <select 
                         className="w-full px-4 py-3 bg-gray-50 border border-transparent rounded-xl focus:bg-white focus:border-sesi-blue focus:ring-4 focus:ring-sesi-blue/5 outline-none transition-all font-bold"
                         value={formData.role}
-                        onChange={(e) => setFormData({...formData, role: e.target.value})}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormData(prev => ({
+                            ...prev,
+                            role: val,
+                            permissions: getDefaultPermissionsForRole(val)
+                          }));
+                        }}
                       >
                         {ROLES.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
                       </select>
@@ -1082,22 +1102,63 @@ export default function Admin() {
                 </div>
 
                 <div className="space-y-4">
-                  <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400 mb-2">Privilégios de Acesso</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {AVAILABLE_PERMISSIONS.map((perm) => (
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                    <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">Privilégios de Acesso</h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="text-[9px] font-bold text-gray-400 uppercase mr-1 flex items-center">Preset:</span>
                       <button
-                        key={perm.id}
                         type="button"
-                        onClick={() => togglePermission(perm.id)}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${
-                          formData.permissions.includes(perm.id)
-                            ? "bg-sesi-green text-white border-sesi-green shadow-lg shadow-green-100"
-                            : "bg-white text-gray-400 border-gray-100 hover:border-gray-200"
-                        }`}
+                        onClick={() => setFormData(prev => ({ ...prev, permissions: getDefaultPermissionsForRole('admin') }))}
+                        className="px-2 py-1 text-[9px] font-black bg-blue-50 hover:bg-blue-100 text-blue-600 rounded transition-colors uppercase tracking-wider"
                       >
-                        {perm.label}
+                        Admin
                       </button>
-                    ))}
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, permissions: getDefaultPermissionsForRole('psychologist') }))}
+                        className="px-2 py-1 text-[9px] font-black bg-teal-50 hover:bg-teal-100 text-teal-600 rounded transition-colors uppercase tracking-wider"
+                      >
+                        Psicólogo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, permissions: getDefaultPermissionsForRole('aee') }))}
+                        className="px-2 py-1 text-[9px] font-black bg-purple-50 hover:bg-purple-100 text-purple-600 rounded transition-colors uppercase tracking-wider"
+                      >
+                        AEE
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, permissions: [] }))}
+                        className="px-2 py-1 text-[9px] font-black bg-gray-100 hover:bg-gray-200 text-gray-600 rounded transition-colors uppercase tracking-wider"
+                      >
+                        Limpar
+                      </button>
+                    </div>
+                  </div>
+                  <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                    <div className="flex flex-wrap gap-2">
+                      {AVAILABLE_PERMISSIONS.map((perm) => (
+                        <button
+                          key={perm.id}
+                          type="button"
+                          onClick={() => togglePermission(perm.id)}
+                          className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all flex items-center gap-1.5 ${
+                            formData.permissions.includes(perm.id)
+                              ? "bg-sesi-green text-white border-sesi-green shadow-lg shadow-green-100"
+                              : "bg-white text-gray-400 border-gray-200 hover:border-gray-300"
+                          }`}
+                        >
+                          <div className={`w-2.5 h-2.5 rounded-sm border flex items-center justify-center ${formData.permissions.includes(perm.id) ? "border-white bg-white/20" : "border-gray-300"}`}>
+                            {formData.permissions.includes(perm.id) && <Check size={8} className="text-white fill-white" />}
+                          </div>
+                          <span>{perm.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-gray-400 font-medium mt-3 pl-1">
+                      Você pode marcar ou desmarcar livremente as permissões para estender ou restringir o acesso de qualquer perfil.
+                    </p>
                   </div>
                 </div>
 

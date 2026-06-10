@@ -37,10 +37,26 @@ export function UnitProvider({ children, user }: { children: React.ReactNode, us
               setDynamicUnits(units);
             }
           } else {
-            // Psychologists/Others - only fetch what they own (fallback)
+            // Psychologists/Others - only fetch what they own or have access to
             const schools = await api.schools.list({ isAdmin: false });
             if (schools) {
-              const units = schools.map((s: any) => s.unit || s.name).filter(Boolean);
+              const allowedUnits = (user?.units || []).map((u: string) => u.trim().toUpperCase());
+              const units = schools
+                .filter((s: any) => {
+                  const isOwner = s.ownerId === user?.id || s.ownerId === user?.uid;
+                  if (isOwner) return true;
+                  
+                  const sUnit = (s.unit || s.name || "").trim().toUpperCase();
+                  if (!sUnit) return false;
+                  
+                  return allowedUnits.some(u => {
+                    const cleanAllowed = u.replace(/^(SESI|UNIDADE|ESCOLA|CENTRO|DEPARTAMENTO)\s+/gi, "").trim();
+                    const cleanRequested = sUnit.replace(/^(SESI|UNIDADE|ESCOLA|CENTRO|DEPARTAMENTO)\s+/gi, "").trim();
+                    return u === sUnit || (cleanAllowed !== "" && cleanAllowed === cleanRequested);
+                  });
+                })
+                .map((s: any) => s.unit || s.name)
+                .filter(Boolean);
               setDynamicUnits(units);
             }
           }

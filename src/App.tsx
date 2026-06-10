@@ -5,7 +5,7 @@ import {
   Calendar, FileText, BarChart3, ClipboardCheck, FileUp, 
   Menu, X, Settings as SettingsIcon, School, 
   ClipboardList, Plus, HelpCircle, ShieldAlert, TrendingUp, ChevronRight, User, ChevronDown, MapPin,
-  Zap, ArrowRight, ArrowLeft, MousePointer2
+  Zap, ArrowRight, ArrowLeft, MousePointer2, Inbox
 } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -291,7 +291,7 @@ const Layout = ({ children, user, onLogout }: any) => {
         { icon: <ClipboardList size={18} />, label: 'Solicitações', path: '/solicitacoes', permission: 'scheduling_requests' },
         { icon: <FileText size={18} />, label: 'Registros', path: '/documentos', permission: 'documents' },
         { icon: <ClipboardCheck size={18} />, label: 'Atendimento AEE', path: '/atendimento-aee', permission: 'documents' },
-        { icon: <ShieldAlert size={18} />, label: 'Denúncias', path: '/gestao-denuncias', permission: 'psychological_listening' },
+        { icon: <Inbox size={18} />, label: 'Caixinha do Acolhimento', path: '/gestao-denuncias', permission: 'psychological_listening' },
       ]
     },
     {
@@ -759,11 +759,17 @@ const Login = ({ onLogin }: any) => {
                 Login Administrativo
               </button>
             </form>
+
+            <a 
+              href="https://land-psc-aee.vercel.app/"
+              className="w-full bg-slate-50 text-slate-500 border border-slate-200 py-5 rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-xs flex items-center justify-center gap-2 hover:bg-slate-100 hover:text-slate-700 transition-all active:scale-95 shadow-lg shadow-slate-100/50"
+            >
+              <ArrowLeft size={16} className="stroke-[3px]" />
+              Voltar para Landing Page
+            </a>
           </div>
 
-          <p className="text-center mt-10 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-            Novo por aqui? <Link to="/register" className="text-pedagogic-blue hover:underline">Ativar Teste Grátis</Link>
-          </p>
+
         </div>
       </div>
     </div>
@@ -1626,10 +1632,15 @@ function AppContent() {
     localStorage.setItem("user", JSON.stringify(userData));
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     setUser(null);
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error("Error signing out from Firebase Auth:", err);
+    }
   };
 
   if (loading || !authReady) {
@@ -1668,7 +1679,7 @@ function AppContent() {
                     <Dashboard user={user} />
                   </Layout>
                 ) : <Navigate to="/alunos" />
-              ) : <LandingPage />
+              ) : <Navigate to="/login" />
             } />
 
             <Route path="/alunos" element={

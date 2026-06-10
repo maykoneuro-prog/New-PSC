@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { api } from "../lib/api";
-import { Calendar, ShieldAlert, MessageSquare, ArrowLeft } from "lucide-react";
+import { MessageSquare, ArrowLeft, HeartHandshake, Inbox } from "lucide-react";
 
 export default function StudentPortal() {
   const [searchParams] = useSearchParams();
@@ -94,30 +94,16 @@ export default function StudentPortal() {
 
         <div className="space-y-4">
           <button 
-            onClick={() => navigate(`/agendar?schoolId=${schoolId}`)}
-            className="w-full group flex items-center gap-5 p-6 bg-white border border-slate-100 rounded-[1.75rem] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all text-left relative overflow-hidden"
-          >
-            <div className="absolute top-0 right-0 w-24 h-24 bg-pedagogic-blue/5 rounded-full -mr-12 -mt-12 group-hover:scale-150 transition-transform duration-500" />
-            <div className="bg-pedagogic-blue/10 text-pedagogic-blue p-4 rounded-2xl group-hover:scale-110 transition-transform shadow-inner">
-              <Calendar size={28} />
-            </div>
-            <div className="relative z-10">
-              <h3 className="font-extrabold text-slate-800 text-lg">Agendar Atendimento</h3>
-              <p className="text-xs font-medium text-slate-500 mt-0.5">Quer conversar com o psicólogo?</p>
-            </div>
-          </button>
-
-          <button 
             onClick={() => navigate(`/denuncia-anonima?schoolId=${schoolId}`)}
             className="w-full group flex items-center gap-5 p-6 bg-white border border-slate-100 rounded-[1.75rem] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all text-left relative overflow-hidden"
           >
-             <div className="absolute top-0 right-0 w-24 h-24 bg-pedagogic-rose/5 rounded-full -mr-12 -mt-12 group-hover:scale-150 transition-transform duration-500" />
-            <div className="bg-pedagogic-rose/10 text-pedagogic-rose p-4 rounded-2xl group-hover:scale-110 transition-transform shadow-inner">
-              <ShieldAlert size={28} />
+             <div className="absolute top-0 right-0 w-24 h-24 bg-pedagogic-teal/5 rounded-full -mr-12 -mt-12 group-hover:scale-150 transition-transform duration-500" />
+            <div className="bg-pedagogic-teal/10 text-pedagogic-teal p-4 rounded-2xl group-hover:scale-110 transition-transform shadow-inner">
+              <Inbox size={28} />
             </div>
             <div className="relative z-10">
-              <h3 className="font-extrabold text-slate-800 text-lg">Reportar Situação</h3>
-              <p className="text-xs font-medium text-slate-500 mt-0.5">Denúncia anônima e segura</p>
+              <h3 className="font-extrabold text-slate-800 text-lg">Caixinha do Acolhimento</h3>
+              <p className="text-xs font-medium text-slate-500 mt-0.5">Deixe seu desabafo, relato ou denúncia segura</p>
             </div>
           </button>
         </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { api } from "../lib/api";
-import { ShieldAlert, Trash2, CheckCircle2, Phone, Filter, Search, Calendar } from "lucide-react";
+import { ShieldAlert, Trash2, CheckCircle2, Phone, Filter, Search, Calendar, User, Inbox, MapPin, Heart, HelpCircle, AlertCircle, Sparkles } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useUnit } from "../contexts/UnitContext";
@@ -22,18 +22,22 @@ export default function AnonymousReportsManagement() {
       .then(res => res.json())
       .then(data => setHasApiKey(data.aiEnabled))
       .catch(() => setHasApiKey(false));
-  }, []);
+  }, [activeUnit]);
 
   const loadData = async () => {
     setLoading(true);
     try {
       const userStr = localStorage.getItem("user");
       const user = userStr ? JSON.parse(userStr) : null;
-      const isSuperAdmin = user?.role === 'super-admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador@exemplo.com';
+      
+      const email = user?.email?.toLowerCase();
+      const superEmails = ['maykon.euro@gmail.com', 'administrador@exemplo.com', 'administrador@sgepsicologia.com'];
+      const isSuperAdmin = user?.role === 'super-admin' || user?.role === 'admin' || user?.id === 'super_admin' || superEmails.includes(email) || user?.email === 'administrador';
+      
       const allowedUnits = user?.units || [];
 
       const [reportsData, schoolsData] = await Promise.all([
-        api.anonymousReports.list({ isAdmin: isSuperAdmin, allowedUnits }),
+        api.anonymousReports.list({ isAdmin: isSuperAdmin, allowedUnits, unit: activeUnit }),
         api.schools.list({ isAdmin: isSuperAdmin, allowedUnits })
       ]);
       setReports(reportsData || []);
@@ -118,12 +122,12 @@ export default function AnonymousReportsManagement() {
     <div className="space-y-10 animate-in fade-in duration-700">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div className="flex items-center gap-5">
-          <div className="bg-gradient-to-br from-pedagogic-rose to-red-600 text-white p-4 rounded-[1.5rem] shadow-xl shadow-red-100">
-            <ShieldAlert size={32} />
+          <div className="bg-gradient-to-br from-pedagogic-teal to-teal-600 text-white p-4 rounded-[1.5rem] shadow-xl shadow-teal-100">
+            <Inbox size={32} />
           </div>
           <div>
-            <h2 className="text-3xl font-black text-slate-800 tracking-tight">Gestão de Escuta Ativa</h2>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">Análise de relatos anônimos</p>
+            <h2 className="text-3xl font-black text-slate-800 tracking-tight">Caixinha do Acolhimento</h2>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">Gestão de acolhimentos e denúncias ativas</p>
           </div>
         </div>
       </div>
@@ -194,12 +198,12 @@ export default function AnonymousReportsManagement() {
                 </div>
               </div>
 
-              <div className="flex-1 p-10 relative">
-                <div className="flex flex-wrap justify-between items-start gap-6 mb-8">
+              <div className="flex-1 p-10 relative space-y-6">
+                <div className="flex flex-wrap justify-between items-start gap-6">
                   <div>
                     <div className="flex items-center gap-3 mb-2">
                        <span className="px-3 py-1 bg-pedagogic-blue/10 text-pedagogic-blue rounded-full text-[10px] font-black uppercase tracking-widest border border-pedagogic-blue/10">
-                         {schools.find(s => s.id === report.schoolId)?.name || 'Unidade SESI'}
+                          {schools.find(s => s.id === report.schoolId)?.name || 'Unidade SESI'}
                        </span>
                     </div>
                     <p className="text-xs text-slate-400 font-bold flex items-center gap-2">
@@ -218,6 +222,28 @@ export default function AnonymousReportsManagement() {
                   </div>
                 </div>
 
+                {/* Identification Section */}
+                <div className="flex flex-wrap gap-3">
+                  {report.studentName && report.studentName !== "Anônimo" ? (
+                    <div className="flex items-center gap-2 text-xs text-slate-600 font-bold bg-blue-50/50 px-4 py-2 rounded-xl border border-blue-100">
+                      <User size={14} className="text-pedagogic-blue" />
+                      <span>Identificado: <span className="text-slate-800 font-extrabold">{report.studentName}</span> {report.studentContact ? `(${report.studentContact})` : ''}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs text-slate-400 font-bold bg-slate-50/50 px-4 py-2 rounded-xl border border-dashed border-slate-200">
+                      <User size={14} className="text-slate-300" />
+                      <span>Anônimo</span>
+                    </div>
+                  )}
+
+                  {report.occurrenceLocation && (
+                    <div className="flex items-center gap-2 text-xs text-rose-700 font-bold bg-rose-50/50 px-4 py-2 rounded-xl border border-rose-100">
+                      <MapPin size={14} className="text-pedagogic-rose" />
+                      <span>Local indicado: <span className="text-rose-900 font-extrabold">{report.occurrenceLocation}</span></span>
+                    </div>
+                  )}
+                </div>
+
                 <div className="bg-[#f8fafc] p-8 rounded-[2rem] border border-slate-100 relative group-hover:bg-white transition-colors">
                    <p className="text-slate-700 leading-relaxed font-semibold italic text-lg select-all">
                      "{report.message || report.content}"
@@ -229,6 +255,12 @@ export default function AnonymousReportsManagement() {
                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoria:</span>
                      <span className="text-[10px] font-black text-pedagogic-blue uppercase tracking-widest">{report.aiAnalysis?.category || 'Geral'}</span>
                   </div>
+
+                  {report.isDenuncia && (
+                    <div className="px-5 py-2.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
+                       <AlertCircle size={14} className="text-amber-500" /> CANAL: DENÚNCIA
+                    </div>
+                  )}
                   
                   {report.aiAnalysis?.isEmergency && (
                     <div className="px-5 py-2.5 bg-pedagogic-rose text-white rounded-full text-[10px] font-black uppercase tracking-widest animate-pulse flex items-center gap-2 shadow-lg shadow-rose-100 border border-white/20">
