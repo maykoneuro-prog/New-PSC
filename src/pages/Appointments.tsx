@@ -20,6 +20,8 @@ export default function Appointments({ user }: any) {
   const [filterDate, setFilterDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [dateFilterMode, setDateFilterMode] = useState<'single' | 'upcoming' | 'all'>('single');
   const [isQuickAdd, setIsQuickAdd] = useState(false);
+  const [studentSearchTerm, setStudentSearchTerm] = useState("");
+  const [isStudentDropdownOpen, setIsStudentDropdownOpen] = useState(false);
   
   const [formData, setFormData] = useState({
     studentId: "",
@@ -44,7 +46,8 @@ export default function Appointments({ user }: any) {
 
   const loadData = async () => {
     try {
-      const isSuperAdmin = user?.role === 'super-admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador@exemplo.com';
+      const email = user?.email?.toLowerCase() || '';
+      const isSuperAdmin = user?.role === 'super-admin' || user?.role === 'admin' || user?.id === 'super_admin' || email === 'maykon.euro@gmail.com' || email.includes('administrador');
       const isCentral = activeUnit === 'Administração Central' || activeUnit === 'Sede';
       
       const filters: any = { 
@@ -207,6 +210,9 @@ export default function Appointments({ user }: any) {
       newTurma: "",
       personType: "Aluno"
     });
+    const foundStudent = students.find((s: any) => s.id === app.studentId);
+    setStudentSearchTerm(foundStudent ? (foundStudent as any).name : "");
+    setIsStudentDropdownOpen(false);
     setEditingId(app.id);
     setShowModal(true);
   };
@@ -265,9 +271,18 @@ export default function Appointments({ user }: any) {
       newTurma: "",
       personType: "Aluno"
     });
+    setStudentSearchTerm("");
     setEditingId(null);
     setShowModal(true);
   };
+
+  const filteredStudents = students.filter((s: any) => {
+    const term = studentSearchTerm.toLowerCase();
+    const nameMatch = (s.name || "").toLowerCase().includes(term);
+    const raMatch = (s.ra || "").toLowerCase().includes(term);
+    const classMatch = (s.class || s.turma || "").toLowerCase().includes(term);
+    return nameMatch || raMatch || classMatch;
+  });
 
   const sortedAppointments = appointments
     .filter(a => {
@@ -473,118 +488,91 @@ export default function Appointments({ user }: any) {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-8">
-              {!editingId && (
-                <div className="flex p-1 bg-slate-100 rounded-2xl w-fit">
-                   <button 
-                     type="button"
-                     onClick={() => setIsQuickAdd(false)}
-                     className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!isQuickAdd ? 'bg-white text-pedagogic-blue shadow-sm' : 'text-slate-400'}`}
-                   >
-                     Buscar Existente
-                   </button>
-                   <button 
-                     type="button"
-                     onClick={() => setIsQuickAdd(true)}
-                     className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isQuickAdd ? 'bg-white text-pedagogic-blue shadow-sm' : 'text-slate-400'}`}
-                   >
-                     Cadastrar Novo
-                   </button>
+              {formData.studentId ? (
+                <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Pessoa / Estudante Selecionado</label>
+                  <div className="flex items-center justify-between px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-705 text-slate-700">
+                    <div className="flex flex-col">
+                      <span>{students.find((s: any) => s.id === formData.studentId)?.['name'] || "Aluno Selecionado"}</span>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        {(() => {
+                          const s: any = students.find((s: any) => s.id === formData.studentId);
+                          if (!s) return 'Estudante';
+                          return `${s.type || 'Aluno'}${s.ra && s.ra !== 'N/A' ? ` • RA: ${s.ra}` : ''}${(s.class || s.turma) ? ` • Turma: ${s.class || s.turma}` : ''}`;
+                        })()}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData({ ...formData, studentId: "" });
+                        setStudentSearchTerm("");
+                      }}
+                      className="text-xs font-black text-pedagogic-rose uppercase tracking-widest hover:underline"
+                    >
+                      Alterar
+                    </button>
+                  </div>
                 </div>
-              )}
-
-              {isQuickAdd && !editingId ? (
-                <div className="space-y-6 animate-in slide-in-from-top-2 duration-300">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="space-y-2 md:col-span-1">
-                      <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Tipo de Pessoa</label>
-                      <select 
-                        className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-700 outline-none"
-                        value={formData.personType}
-                        onChange={(e) => setFormData({...formData, personType: e.target.value as any})}
-                      >
-                         <option value="Aluno">Aluno</option>
-                         <option value="Responsável">Responsável</option>
-                         <option value="Colaborador">Colaborador</option>
-                      </select>
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                       <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Nome Completo</label>
-                       <input 
-                         type="text"
-                         className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-700 outline-none"
-                         placeholder="Digite o nome completo..."
-                         value={formData.newName}
-                         onChange={(e) => setFormData({...formData, newName: e.target.value})}
-                       />
-                    </div>
+              ) : (
+                <div className="space-y-2 relative animate-in slide-in-from-top-2 duration-300">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Pessoa / Estudante</label>
+                  <div className="relative">
+                    <input 
+                      type="text"
+                      className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-pedagogic-blue/5 font-bold text-slate-700 transition-all pl-12"
+                      placeholder="Digite para buscar por Nome, RA ou Turma..."
+                      value={studentSearchTerm}
+                      onChange={(e) => {
+                        setStudentSearchTerm(e.target.value);
+                        setIsStudentDropdownOpen(true);
+                      }}
+                      onFocus={() => setIsStudentDropdownOpen(true)}
+                      onBlur={() => setTimeout(() => setIsStudentDropdownOpen(false), 200)}
+                    />
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                   </div>
 
-                  {formData.personType === 'Aluno' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in">
-                       <div className="space-y-2">
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">RA (Matrícula)</label>
-                          <input 
-                            type="text"
-                            className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-700 outline-none"
-                            placeholder="Ex: 12345"
-                            value={formData.newRA}
-                            onChange={(e) => setFormData({...formData, newRA: e.target.value})}
-                          />
-                       </div>
-                       <div className="space-y-2">
-                          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Turma</label>
-                          <input 
-                            type="text"
-                            className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-slate-700 outline-none"
-                            placeholder="Ex: 3º Ano A"
-                            value={formData.newTurma}
-                            onChange={(e) => setFormData({...formData, newTurma: e.target.value})}
-                          />
-                       </div>
+                  {isStudentDropdownOpen && (
+                    <div className="absolute z-50 w-full mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl max-h-60 overflow-y-auto custom-scrollbar">
+                      {filteredStudents.length === 0 ? (
+                        <div className="p-4 text-center text-xs font-bold text-slate-400 uppercase tracking-widest">
+                          Nenhum estudante encontrado
+                        </div>
+                      ) : (
+                        filteredStudents.map((s: any) => (
+                          <div
+                            key={s.id}
+                            onClick={() => {
+                              setFormData({ ...formData, studentId: s.id });
+                              setStudentSearchTerm(s.name);
+                              setIsStudentDropdownOpen(false);
+                            }}
+                            className="text-left px-6 py-3 hover:bg-slate-50/50 transition-all border-b border-slate-50 last:border-0 flex flex-col cursor-pointer"
+                          >
+                            <span className="font-bold text-slate-700">{s.name}</span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                              <span>{s.type || 'Aluno'}</span>
+                              {s.ra && s.ra !== 'N/A' && <span>• RA: {s.ra}</span>}
+                              {(s.class || s.turma) && <span>• Turma: {s.class || s.turma}</span>}
+                            </span>
+                          </div>
+                        ))
+                      )}
                     </div>
                   )}
                 </div>
-              ) : (
-                <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Pessoa / Estudante</label>
-                  <select 
-                    className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-pedagogic-blue/5 font-bold text-slate-700 transition-all"
-                    value={formData.studentId}
-                    onChange={(e) => setFormData({...formData, studentId: e.target.value})}
-                  >
-                    <option value="">Escolher da lista...</option>
-                    {students.map((s: any) => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.type || 'Aluno'}{s.ra && s.ra !== 'N/A' ? ` - RA: ${s.ra}` : ''})</option>
-                    ))}
-                  </select>
-                </div>
               )}
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-2">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Tipo de Atenção</label>
-                  <select 
-                    required
-                    className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-pedagogic-blue/5 font-bold text-slate-700 transition-all disabled:opacity-50"
-                    value={formData.type}
-                    onChange={(e) => setFormData({...formData, type: e.target.value})}
-                    disabled={user?.role !== 'admin' && user?.role !== 'super-admin'}
-                  >
-                    {types.map(t => (
-                      <option key={t.id} value={t.name}>{t.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Subtipo / Tema Principal</label>
-                  <select 
-                    required
-                    className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-pedagogic-blue/5 font-bold text-slate-700 transition-all cursor-pointer"
-                    value={formData.subtype}
-                    onChange={(e) => setFormData({...formData, subtype: e.target.value})}
-                  >
-                    <option value="">Selecione o subtipo...</option>
+              <div className="space-y-2">
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Subtipo / Tema Principal</label>
+                <select 
+                  required
+                  className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-4 focus:ring-pedagogic-blue/5 font-bold text-slate-700 transition-all cursor-pointer"
+                  value={formData.subtype}
+                  onChange={(e) => setFormData({...formData, subtype: e.target.value})}
+                >
+                  <option value="">Selecione o subtipo...</option>
                     <option value="Conflito Familiar">Conflito Familiar</option>
                     <option value="Dificuldade de Aprendizado">Dificuldade de Aprendizado</option>
                     <option value="Transtorno Emocional">Transtorno Emocional (Ansiedade/Depressão)</option>
@@ -597,7 +585,6 @@ export default function Appointments({ user }: any) {
                     <option value="Outros">Outros</option>
                   </select>
                 </div>
-              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">

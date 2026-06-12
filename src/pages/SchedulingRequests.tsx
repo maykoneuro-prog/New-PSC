@@ -23,7 +23,8 @@ export default function SchedulingRequests({ user }: { user: any }) {
 
   const loadData = async () => {
     try {
-      const isSuperAdmin = user?.role === 'super-admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador@exemplo.com';
+      const email = user?.email?.toLowerCase() || '';
+      const isSuperAdmin = user?.role === 'super-admin' || user?.role === 'admin' || user?.id === 'super_admin' || email === 'maykon.euro@gmail.com' || email.includes('administrador');
       const allowedUnits = user?.units || [];
       const [reqs, schs, cats, studs] = await Promise.all([
         api.schedulingRequests.list({ unit: activeUnit, isAdmin: isSuperAdmin, allowedUnits }),

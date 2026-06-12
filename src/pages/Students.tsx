@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { Plus, Search, GraduationCap, LayoutGrid, List, User, School, Calendar as CalendarIcon, FileText, Camera, X as CloseIcon, MessageCircle, Trash2, FileSpreadsheet, Download as DownloadIcon, Upload } from "lucide-react";
 import * as XLSX from 'xlsx';
 import { api } from "../lib/api";
+import Documents from "./Documents";
 import { translateFirebaseError } from "../lib/errorTranslations";
 import { openWhatsApp } from "../lib/whatsapp";
 import { useUnit } from "../contexts/UnitContext";
@@ -10,6 +11,7 @@ export default function Students({ user }: { user: any }) {
   const { activeUnit } = useUnit();
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [activeDetailsTab, setActiveDetailsTab] = useState<"info" | "timeline">("info");
   const [isEditing, setIsEditing] = useState(false);
   const [editFormData, setEditFormData] = useState<any>(null);
   const [students, setStudents] = useState([]);
@@ -50,7 +52,8 @@ export default function Students({ user }: { user: any }) {
 
   const loadData = async () => {
     try {
-      const isSuperAdmin = user?.role === 'super-admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador@exemplo.com';
+      const email = user?.email?.toLowerCase() || '';
+      const isSuperAdmin = user?.role === 'super-admin' || user?.role === 'admin' || user?.id === 'super_admin' || email === 'maykon.euro@gmail.com' || email.includes('administrador');
       const cleanUnit = activeUnit?.trim().toUpperCase();
       const isCentral = isSuperAdmin && ['ADMINISTRAÇÃO CENTRAL', 'SEDE'].includes(cleanUnit);
       
@@ -119,8 +122,9 @@ export default function Students({ user }: { user: any }) {
     }
   };
 
-    const isSuperAdmin = user?.role === 'super-admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador@exemplo.com';
-    const isCentral = isSuperAdmin && (['Administração Central', 'Sede', 'ADMINISTRAÇÃO CENTRAL', 'SEDE'].includes(activeUnit.trim().toUpperCase()));
+    const email = user?.email?.toLowerCase() || '';
+    const isSuperAdmin = user?.role === 'super-admin' || user?.role === 'admin' || user?.id === 'super_admin' || email === 'maykon.euro@gmail.com' || email.includes('administrador');
+    const isCentral = isSuperAdmin && (['Administração Central', 'Sede', 'ADMINISTRAÇÃO CENTRAL', 'SEDE'].includes((activeUnit || "").trim().toUpperCase()));
     
     const filteredStudents = students.filter((s: any) => {
     const sFromId = schoolsList.find((sch: any) => sch.id === s.schoolId);
@@ -220,6 +224,7 @@ export default function Students({ user }: { user: any }) {
     setSelectedStudent(student);
     setEditFormData(student);
     setIsEditing(false);
+    setActiveDetailsTab("info");
     setShowDetailsModal(true);
   };
 
@@ -709,7 +714,7 @@ export default function Students({ user }: { user: any }) {
       )}
       {showDetailsModal && selectedStudent && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl w-full max-w-3xl p-8 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-[2rem] w-full max-w-4xl p-8 shadow-2xl max-h-[92vh] overflow-y-auto">
             <div className="flex justify-between items-start mb-6">
               <div className="flex items-center gap-4">
                 {selectedStudent.photoUrl ? (
@@ -748,6 +753,33 @@ export default function Students({ user }: { user: any }) {
                   </button>
                 </div>
             </div>
+
+            {!isEditing && (
+              <div className="flex border-b border-slate-100 mb-6 gap-6">
+                <button
+                  type="button"
+                  onClick={() => setActiveDetailsTab("info")}
+                  className={`pb-3 text-sm font-bold transition-all relative ${
+                    activeDetailsTab === "info"
+                      ? "text-sesi-blue font-black"
+                      : "text-slate-400 hover:text-slate-600"
+                  }`}
+                >
+                  📋 Ficha Acadêmica
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveDetailsTab("timeline")}
+                  className={`pb-3 text-sm font-bold transition-all relative ${
+                    activeDetailsTab === "timeline"
+                      ? "text-blue-600 font-black"
+                      : "text-slate-400 hover:text-slate-600"
+                  }`}
+                >
+                  🗂️ Prontuário e Histórico de Registros
+                </button>
+              </div>
+            )}
 
             {isEditing ? (
               <form onSubmit={handleSaveEdit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -918,6 +950,8 @@ export default function Students({ user }: { user: any }) {
                   </button>
                 </div>
               </form>
+            ) : activeDetailsTab === "timeline" ? (
+              <Documents user={user} embeddedStudentId={selectedStudent.id} isEmbedded={true} />
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">

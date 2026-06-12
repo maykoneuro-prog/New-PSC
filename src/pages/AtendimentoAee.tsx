@@ -49,7 +49,8 @@ export default function AtendimentoAee({ user }: { user: any }) {
   const loadData = async () => {
     try {
       setLoading(true);
-      const isSuperAdmin = user?.role === 'super-admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador@exemplo.com';
+      const email = user?.email?.toLowerCase() || '';
+      const isSuperAdmin = user?.role === 'super-admin' || user?.role === 'admin' || user?.id === 'super_admin' || email === 'maykon.euro@gmail.com' || email.includes('administrador');
       const isCentral = activeUnit === 'Administração Central' || activeUnit === 'Sede';
       
       const filters: any = { 
@@ -160,10 +161,10 @@ export default function AtendimentoAee({ user }: { user: any }) {
         type: 'aee_register',
         typeName: 'Registro AEE',
         studentId: formData.studentId,
-        studentName: student?.name || 'N/A',
-        studentRa: student?.ra || '',
-        studentClass: student?.class || '',
-        studentSchool: schoolsList.find(sc => sc.id === student?.schoolId)?.name || '',
+        studentName: student?.name || docBeingEdited?.studentName || 'N/A',
+        studentRa: student?.ra || docBeingEdited?.studentRa || '',
+        studentClass: student?.class || docBeingEdited?.studentClass || '',
+        studentSchool: schoolsList.find(sc => sc.id === student?.schoolId)?.name || docBeingEdited?.studentSchool || '',
         professionalId: user?.id || user?.uid || 'unknown',
         professionalName: user?.name || 'N/A',
         professionalCouncil: user?.professionalCouncil || 'AEE',
@@ -930,10 +931,16 @@ const StudentSelector = ({ students, schools, onSelect, selectedStudent, onRefre
 
     setSavingQuick(true);
     try {
+      const selectedSchoolRecord = schools.find((sch: any) => sch.id === quickAddForm.schoolId);
+      const unitName = (selectedSchoolRecord?.unit || selectedSchoolRecord?.name || "").toUpperCase();
+
       const newPerson = await api.students.create({
         ...quickAddForm,
         age: 0,
         studentType: 'external',
+        schoolYear: new Date().getFullYear().toString(),
+        unit: unitName,
+        schoolUnit: unitName,
         observations: "Cadastro rápido via emissão de documento"
       });
       

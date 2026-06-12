@@ -7,7 +7,7 @@ import { api } from "../lib/api";
 import { 
   Users, Calendar, School, TrendingUp, 
   AlertCircle, BrainCircuit, FileDown,
-  Filter, Activity, Target
+  Filter, Activity, Target, X, Search
 } from "lucide-react";
 import { format, eachDayOfInterval, isSameDay, subMonths, isWithinInterval, startOfDay, endOfDay } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -25,6 +25,10 @@ export default function Reports({ user }: { user: any }) {
   const [selectedPeriod, setSelectedPeriod] = useState(3); // Months
   const [selectedSchool, setSelectedSchool] = useState<string>("all");
   const [schools, setSchools] = useState<any[]>([]);
+  
+  const [showStudentsModal, setShowStudentsModal] = useState(false);
+  const [modalPeriod, setModalPeriod] = useState<'day' | 'week' | 'month' | 'year'>('month');
+  const [modalSearch, setModalSearch] = useState("");
 
   useEffect(() => {
     loadData();
@@ -197,7 +201,8 @@ export default function Reports({ user }: { user: any }) {
         byOrigin, 
         byGravity,
         timeData,
-        raw: allAttendance
+        raw: allAttendance,
+        students
       });
     } catch (err) {
       console.error(err);
@@ -357,6 +362,84 @@ export default function Reports({ user }: { user: any }) {
     doc.save(`Relatorio_Estrategico_${format(new Date(), 'yyyyMMdd')}.pdf`);
   };
 
+  const getAttendanceDate = (app: any) => {
+    if (!app || !app.date) return null;
+    return app.date?.toDate ? app.date.toDate() : new Date(app.date);
+  };
+
+  const getFilteredAttendances = (period: 'day' | 'week' | 'month' | 'year') => {
+    if (!data?.raw) return [];
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const currentDate = now.getDate();
+    
+    return data.raw.filter((app: any) => {
+      const appDate = getAttendanceDate(app);
+      if (!appDate || isNaN(appDate.getTime())) return false;
+      
+      if (period === 'day') {
+        return appDate.getFullYear() === currentYear &&
+               appDate.getMonth() === currentMonth &&
+               appDate.getDate() === currentDate;
+      } else if (period === 'week') {
+        const diffTime = now.getTime() - appDate.getTime();
+        const diffDays = diffTime / (1000 * 3600 * 24);
+        return diffDays >= 0 && diffDays <= 7;
+      } else if (period === 'month') {
+        return appDate.getFullYear() === currentYear &&
+               appDate.getMonth() === currentMonth;
+      } else if (period === 'year') {
+        return appDate.getFullYear() === currentYear;
+      }
+      return false;
+    });
+  };
+
+  const getStudentBreakdown = (period: 'day' | 'week' | 'month' | 'year') => {
+    const periodAttendances = getFilteredAttendances(period);
+    const studentGroups: Record<string, { studentInfo: any, attendances: any[] }> = {};
+    
+    periodAttendances.forEach((app: any) => {
+      const studentId = app.studentId || "";
+      const name = app.studentName || app.student?.name || app.newName || "Não identificado";
+      const key = studentId ? `id_${studentId}` : `name_${name}`;
+      
+      let info: any = null;
+      if (app.studentId && data.students) {
+        const s = data.students.find((st: any) => st.id === app.studentId);
+        if (s) {
+          info = {
+            name: s.name,
+            ra: s.ra || s.matricula || "N/A",
+            turma: s.turma || s.anoSegmento || "N/A",
+            unit: s.unit || s.schoolName || app.unit || "N/A"
+          };
+        }
+      }
+      
+      if (!info) {
+        info = {
+          name: name,
+          ra: app.studentRA || app.newRA || "N/A",
+          turma: app.studentTurma || app.newTurma || "N/A",
+          unit: app.unit || "N/A"
+        };
+      }
+      
+      if (!studentGroups[key]) {
+        studentGroups[key] = {
+          studentInfo: info,
+          attendances: []
+        };
+      }
+      
+      studentGroups[key].attendances.push(app);
+    });
+    
+    return Object.values(studentGroups).sort((a, b) => a.studentInfo.name.localeCompare(b.studentInfo.name));
+  };
+
   const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#ec4899'];
   const GRAVITY_COLORS = {
     'Baixa': '#10b981',
@@ -425,7 +508,14 @@ export default function Reports({ user }: { user: any }) {
       ) : (
         <>
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-            <MetricCard title="Total de Atendimentos" value={data?.stats?.totalAppointments || 0} icon={<Calendar />} color="text-blue-600" bg="bg-blue-50" />
+            <MetricCard 
+              title="Total de Atendimentos" 
+              value={data?.stats?.totalAppointments || 0} 
+              icon={<Calendar />} 
+              color="text-blue-600" 
+              bg="bg-blue-50" 
+              onClick={() => setShowStudentsModal(true)} 
+            />
             <MetricCard title="Escolas Abrangidas" value={data?.stats?.totalSchools || 0} icon={<School />} color="text-indigo-600" bg="bg-indigo-50" />
             <MetricCard title="Alunos Atendidos" value={data?.stats?.totalStudents || 0} icon={<Users />} color="text-teal-600" bg="bg-teal-50" />
             <MetricCard title="Casos Críticos" value={data?.stats?.criticalCases || 0} icon={<AlertCircle />} color="text-rose-600" bg="bg-rose-50" sub="Necessitam Atenção Imediata" />
@@ -659,13 +749,232 @@ export default function Reports({ user }: { user: any }) {
           </div>
         </>
       )}
+
+      {showStudentsModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[99] animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Dialog Header */}
+            <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div>
+                <h3 className="text-2xl font-black text-slate-800 tracking-tight">Alunos Atendidos por Período</h3>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.1em] mt-1">
+                  Listagem e detalhamento de ocorrências e acolhimentos
+                </p>
+              </div>
+              <button 
+                onClick={() => setShowStudentsModal(false)}
+                className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-400 hover:text-slate-600 rounded-2xl transition-all"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Period Selector Tabs & Search Filter */}
+            <div className="px-8 py-5 border-b border-slate-100 bg-slate-50/30 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex p-1 bg-slate-200/60 rounded-2xl w-fit border border-slate-200/55">
+                {(['day', 'week', 'month', 'year'] as const).map((period) => {
+                  const labels = {
+                    day: 'No Dia',
+                    week: 'Na Semana',
+                    month: 'No Mês',
+                    year: 'No Ano'
+                  };
+                  const subLabels = {
+                    day: 'Hoje',
+                    week: 'Últimos 7d',
+                    month: 'Mês Atual',
+                    year: 'Ano Atual'
+                  };
+                  const isActive = modalPeriod === period;
+                  return (
+                    <button
+                      key={period}
+                      onClick={() => { setModalPeriod(period); setModalSearch(""); }}
+                      className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                        isActive ? 'bg-white text-pedagogic-blue shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                      }`}
+                    >
+                      <span className="block">{labels[period]}</span>
+                      <span className="block text-[8px] font-bold text-slate-300 font-sans mt-0.5">{subLabels[period]}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Search box input */}
+              <div className="relative w-full md:max-w-xs">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Search size={14} className="text-slate-400" />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Pesquisar aluno por nome ou RA..."
+                  value={modalSearch}
+                  onChange={(e) => setModalSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-700 outline-none focus:border-pedagogic-blue focus:ring-1 focus:ring-pedagogic-blue/10 transition-all shadow-sm"
+                />
+              </div>
+            </div>
+
+            {/* Stats summary banner */}
+            {(() => {
+              const breakdown = getStudentBreakdown(modalPeriod);
+              const filteredBreakdown = breakdown.filter(item => 
+                item.studentInfo.name.toLowerCase().includes(modalSearch.toLowerCase()) ||
+                item.studentInfo.ra.toLowerCase().includes(modalSearch.toLowerCase())
+              );
+              const totalPeriodAppointments = filteredBreakdown.reduce((sum, item) => sum + item.attendances.length, 0);
+              const totalPeriodStudents = filteredBreakdown.length;
+
+              return (
+                <>
+                  <div className="px-8 py-3.5 bg-blue-50/50 border-b border-slate-100 flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    <div>
+                      Alunos Identificados: <span className="text-blue-600 text-xs font-black ml-1 bg-blue-100/60 px-2 py-0.5 rounded-md">{totalPeriodStudents}</span>
+                    </div>
+                    <div>
+                      Total de Atendimentos: <span className="text-blue-600 text-xs font-black ml-1 bg-blue-100/60 px-2 py-0.5 rounded-md">{totalPeriodAppointments}</span>
+                    </div>
+                  </div>
+
+                  {/* Scrollable list content */}
+                  <div className="flex-1 overflow-y-auto p-8 space-y-4 bg-slate-50/20 max-h-[50vh]">
+                    {filteredBreakdown.length === 0 ? (
+                      <div className="text-center py-16 space-y-3">
+                        <p className="text-sm font-black text-slate-400 uppercase tracking-wider">Nenhum Atendimento Encontrado</p>
+                        <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                          Não há registros correspondentes listados para o período de <span className="font-bold text-slate-600">
+                            {modalPeriod === 'day' ? 'hoje' : modalPeriod === 'week' ? 'esta semana' : modalPeriod === 'month' ? 'deste mês' : 'deste ano'}
+                          </span>.
+                        </p>
+                      </div>
+                    ) : (
+                      filteredBreakdown.map((item, idx) => {
+                        const info = item.studentInfo;
+                        const initials = info.name ? info.name.split(' ').map((n: string) => n[0]).slice(0, 2).join('').toUpperCase() : "?";
+                        
+                        return (
+                           <div key={idx} className="bg-white border border-slate-100 rounded-2xl p-5 hover:shadow-md transition-all space-y-4">
+                             {/* Individual student header block */}
+                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100/70 pb-3">
+                               <div className="flex items-center gap-3">
+                                 <div className="w-10 h-10 rounded-xl bg-pedagogic-blue/5 border border-pedagogic-blue/10 flex items-center justify-center font-black text-xs text-pedagogic-blue shrink-0">
+                                   {initials}
+                                 </div>
+                                 <div>
+                                   <h4 className="text-sm font-black text-slate-800">{info.name}</h4>
+                                   <div className="flex flex-wrap items-center gap-2 mt-1">
+                                     <span className="text-[9px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded uppercase tracking-wider">
+                                       RA: {info.ra}
+                                     </span>
+                                     <span className="text-[9px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded uppercase tracking-wider">
+                                       Turma: {info.turma}
+                                     </span>
+                                   </div>
+                                 </div>
+                               </div>
+                               <div className="sm:text-right flex flex-col items-start sm:items-end">
+                                 <span className="px-2.5 py-1 bg-pedagogic-blue/5 text-pedagogic-blue rounded-lg text-[9px] font-black uppercase tracking-wider border border-pedagogic-blue/10">
+                                   {info.unit}
+                                 </span>
+                                 <p className="text-[9px] font-bold text-slate-400 mt-1.5 uppercase">
+                                   {item.attendances.length} {item.attendances.length === 1 ? 'ocorrência' : 'ocorrências'} no período
+                                 </p>
+                               </div>
+                             </div>
+
+                             {/* Attendance List subgroup */}
+                             <div className="space-y-2">
+                               {item.attendances.map((att: any, attIdx: number) => {
+                                 const attDate = getAttendanceDate(att);
+                                 const formattedDate = attDate ? format(attDate, "dd/MM/yyyy") : "N/A";
+                                 const formattedTime = attDate ? format(attDate, "HH:mm") : "";
+                                 
+                                 const badgeColors: Record<string, string> = {
+                                   'Baixa': 'bg-emerald-50 text-emerald-600 border-emerald-100',
+                                   'Média': 'bg-amber-50 text-amber-600 border-amber-100',
+                                   'Alta': 'bg-orange-50 text-orange-600 border-orange-100',
+                                   'Crítica': 'bg-rose-50 text-rose-600 border-rose-100',
+                                   'low': 'bg-emerald-50 text-emerald-600 border-emerald-100',
+                                   'medium': 'bg-amber-50 text-amber-600 border-amber-100',
+                                   'high': 'bg-orange-50 text-orange-600 border-orange-100',
+                                   'critical': 'bg-rose-50 text-rose-600 border-rose-100',
+                                 };
+                                 
+                                 const gravityLabelMap: Record<string, string> = {
+                                   'low': 'Baixa',
+                                   'medium': 'Média',
+                                   'high': 'Alta',
+                                   'critical': 'Crítica',
+                                   'Baixa': 'Baixa',
+                                   'Média': 'Média',
+                                   'Alta': 'Alta',
+                                   'Crítica': 'Crítica'
+                                 };
+                                 
+                                 const gravityValue = att.gravity || 'low';
+                                 const gravityClass = badgeColors[gravityValue] || 'bg-slate-50 text-slate-500 border-slate-100';
+                                 const gravityLabel = gravityLabelMap[gravityValue] || 'Geral';
+
+                                 return (
+                                   <div key={attIdx} className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-3.5 bg-slate-50/50 hover:bg-slate-50 rounded-xl border border-slate-100/60 transition-colors">
+                                     <div className="space-y-1">
+                                       <div className="flex flex-wrap items-center gap-2">
+                                         <p className="text-xs font-bold text-slate-700">
+                                           {att.typeLabel || 'Atendimento'}
+                                         </p>
+                                         <span className="text-[9px] font-black text-slate-400 bg-white border border-slate-150 px-2 py-0.5 rounded-md">
+                                           {formattedDate} {formattedTime && ` às ${formattedTime}`}
+                                         </span>
+                                       </div>
+                                       <p className="text-[10px] font-medium text-slate-400">
+                                         Profissional responsável: <span className="font-bold text-slate-500">{att.professionalName || 'Não especificado'}</span>
+                                       </p>
+                                       {att.data?.subtype && (
+                                         <p className="text-[9px] font-bold text-purple-600 bg-purple-50 border border-purple-100/50 px-1.5 py-0.5 rounded w-fit">
+                                           Subtipo: {att.data.subtype}
+                                         </p>
+                                       )}
+                                     </div>
+                                     <span className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-wider border w-fit shrink-0 ${gravityClass}`}>
+                                       Gravidade: {gravityLabel}
+                                     </span>
+                                   </div>
+                                 );
+                               })}
+                             </div>
+                           </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </>
+              );
+            })()}
+
+            {/* Footer closing block */}
+            <div className="px-8 py-5 border-t border-slate-100 bg-slate-50/50 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowStudentsModal(false)}
+                className="px-6 py-3 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition-all active:scale-95 shadow-md"
+              >
+                Fechar Painel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function MetricCard({ title, value, icon, color, bg, sub }: any) {
+function MetricCard({ title, value, icon, color, bg, sub, onClick }: any) {
   return (
-    <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm shadow-slate-100/50 hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1 transition-all group">
+    <div 
+      onClick={onClick}
+      className={`bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm shadow-slate-100/50 hover:shadow-xl hover:shadow-slate-200/50 hover:-translate-y-1 transition-all group ${onClick ? 'cursor-pointer hover:border-blue-300' : ''}`}
+    >
       <div className={`p-4 rounded-2xl ${bg} ${color} w-fit mb-6 transition-transform group-hover:scale-110`}>
         {icon}
       </div>

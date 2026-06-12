@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Plus, Search, FileText, Download, Trash2, Eye, ChevronRight, School, User, Calendar as CalendarIcon, ClipboardCheck, FileCheck, FileSignature, FileWarning, X, Settings, TrendingUp, LayoutGrid, List, ChevronDown, ChevronUp, UserPlus, CheckCircle2, Users, GraduationCap } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { generateAIResponse, isAIEnabled } from "../lib/ai";
 import { generateDocumentPDF } from "../lib/documentGenerator";
@@ -8,7 +9,6 @@ import { ptBR } from "date-fns/locale";
 import { useUnit } from "../contexts/UnitContext";
 
 const DOCUMENT_TYPES = [
-  { id: 'school_diagnosis', name: 'Diagnóstico Escolar', icon: <School size={20} /> },
   { id: 'psychological_listening', name: 'Registro de Escuta Psicológica', icon: <User size={20} /> },
   { id: 'group_attendance', name: 'Atendimento em Grupo', icon: <Users size={20} /> },
   { id: 'pedagogical_participation', name: 'Participação em Ativ. Pedagógicas', icon: <GraduationCap size={20} /> },
@@ -16,16 +16,24 @@ const DOCUMENT_TYPES = [
   { id: 'referral', name: 'Encaminhamento', icon: <ChevronRight size={20} /> },
   { id: 'attendance_declaration', name: 'Declaração de Comparecimento', icon: <FileCheck size={20} /> },
   { id: 'authorization_term', name: 'Termo de Autorização', icon: <FileSignature size={20} /> },
-  { id: 'aee_register', name: 'Registro AEE', icon: <ClipboardCheck size={20} /> },
 ];
 
-export default function Documents({ user }: { user: any }) {
+export default function Documents({ user, embeddedStudentId, isEmbedded }: { user: any; embeddedStudentId?: string; isEmbedded?: boolean }) {
   const { activeUnit } = useUnit();
+  const [searchParams] = useSearchParams();
+  const typeFilter = searchParams.get("type");
+  const email = user?.email?.toLowerCase() || '';
+  const isSuperAdmin = user?.role === 'super-admin' || user?.role === 'admin' || user?.id === 'super_admin' || email === 'maykon.euro@gmail.com' || email.includes('administrador');
+
   const getAvailableDocumentTypes = (u: any) => {
-    if (u?.role === 'aee') {
-      return DOCUMENT_TYPES.filter(type => type.id === 'aee_register');
+    let list = DOCUMENT_TYPES;
+    if (isEmbedded) {
+      list = list.filter(type => type.id !== 'group_attendance' && type.id !== 'pedagogical_participation');
     }
-    return DOCUMENT_TYPES;
+    if (typeFilter) {
+      return list.filter(type => type.id === typeFilter);
+    }
+    return list;
   };
   const [documents, setDocuments] = useState<any[]>([]);
   const [showModal, setShowModal] = useState(false);
@@ -61,30 +69,55 @@ export default function Documents({ user }: { user: any }) {
 
   useEffect(() => {
     loadData();
-  }, [activeUnit]);
+  }, [activeUnit, embeddedStudentId, typeFilter]);
+
+  useEffect(() => {
+    if (typeFilter) {
+      setExpandedGroups([typeFilter]);
+    } else {
+      setExpandedGroups(DOCUMENT_TYPES.map(t => t.id));
+    }
+  }, [typeFilter]);
+
+  useEffect(() => {
+    if (embeddedStudentId && students.length > 0) {
+      const student = students.find(s => s.id === embeddedStudentId);
+      if (student) {
+        setSelectedStudentForDoc(student);
+        setFormData(prev => ({ ...prev, studentId: student.id }));
+      }
+    }
+  }, [embeddedStudentId, students]);
 
   const loadData = async () => {
     try {
-      const isSuperAdmin = user?.role === 'super-admin' || user?.id === 'super_admin' || user?.email === 'maykon.euro@gmail.com' || user?.email === 'administrador@exemplo.com';
       const isCentral = activeUnit === 'Administração Central' || activeUnit === 'Sede';
       
       const filters: any = { 
-        unit: isCentral ? undefined : activeUnit, 
+        unit: isCentral || isEmbedded ? undefined : activeUnit, 
         isAdmin: isSuperAdmin 
       };
       
-      if (!isSuperAdmin) {
+      if (isEmbedded && embeddedStudentId) {
+        filters.studentId = embeddedStudentId;
+      }
+      
+      if (!isSuperAdmin && !isEmbedded) {
         filters.professionalId = user.id || user.uid;
+      }
+      if (!isSuperAdmin) {
         filters.allowedUnits = user?.units || [];
       }
 
+      const selectStudentFilters: any = { 
+        unit: isCentral || (isEmbedded && embeddedStudentId) ? undefined : activeUnit, 
+        isAdmin: isSuperAdmin, 
+        allowedUnits: user?.units || [] 
+      };
+
       const [docs, studs, lheads, layouts, schools] = await Promise.all([
         api.documents.list(filters),
-        api.students.list({ 
-          unit: isCentral ? undefined : activeUnit, 
-          isAdmin: isSuperAdmin, 
-          allowedUnits: user?.units || [] 
-        }),
+        api.students.list(selectStudentFilters),
         api.letterheads.listAvailable(user?.id || user?.uid, activeUnit),
         api.documentLayouts.list(),
         api.schools.list({ 
@@ -93,8 +126,8 @@ export default function Documents({ user }: { user: any }) {
         })
       ]);
       let fetchedDocs = docs || [];
-      if (user?.role === 'aee') {
-        fetchedDocs = fetchedDocs.filter((d: any) => d.type === 'aee_register');
+      if (typeFilter) {
+        fetchedDocs = fetchedDocs.filter((d: any) => d.type === typeFilter);
       }
       setDocuments(fetchedDocs);
       setStudents(studs || []);
@@ -160,7 +193,8 @@ export default function Documents({ user }: { user: any }) {
 
     setSaving(true);
     try {
-      const student = students.find(s => s.id === formData.studentId);
+      const studentIdToFind = formData.studentId || (isEmbedded ? embeddedStudentId : "");
+      const student = students.find(s => s.id === studentIdToFind);
       
       // Se não houver letterheadId no formData, usamos o default do layout se existir
       const defaultLayout = documentLayouts.find(l => l.documentTypeId === selectedType);
@@ -169,15 +203,15 @@ export default function Documents({ user }: { user: any }) {
       const payload = {
         type: selectedType,
         typeName: DOCUMENT_TYPES.find(t => t.id === selectedType)?.name,
-        studentId: formData.studentId || "",
-        studentName: student?.name || (['group_attendance', 'pedagogical_participation'].includes(selectedType) ? 'Atividade Coletiva' : 'N/A'),
-        studentRa: student?.ra || '',
-        studentClass: student?.class || '',
-        studentSchool: schoolsList.find(sc => sc.id === student?.schoolId)?.name || '',
+        studentId: studentIdToFind,
+        studentName: student?.name || docBeingEdited?.studentName || (['group_attendance', 'pedagogical_participation'].includes(selectedType) ? 'Atividade Coletiva' : 'N/A'),
+        studentRa: student?.ra || docBeingEdited?.studentRa || '',
+        studentClass: student?.class || docBeingEdited?.studentClass || '',
+        studentSchool: schoolsList.find(sc => sc.id === student?.schoolId)?.name || docBeingEdited?.studentSchool || '',
         professionalId: user?.id || user?.uid || 'unknown',
         professionalName: user?.name || 'N/A',
         professionalCouncil: user?.professionalCouncil || '',
-        unit: activeUnit,
+        unit: (activeUnit || "").trim().toUpperCase(),
         letterheadId: letterheadIdToSave,
         data: formData,
         date: isEditing ? docBeingEdited.date : new Date().toISOString()
@@ -491,6 +525,334 @@ export default function Documents({ user }: { user: any }) {
     </tr>
   );
 
+  if (isEmbedded) {
+    const sortedDocs = [...filteredDocs].sort((a, b) => new Date(b.date || b.createdAt).getTime() - new Date(a.date || a.createdAt).getTime());
+    
+    return (
+      <div className="space-y-6">
+        {/* Prontuário Timeline Render */}
+        <div className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border border-slate-100">
+          <div>
+            <h4 className="text-sm font-bold text-slate-700">Histórico de Atendimentos e Documentos</h4>
+            <p className="text-xs text-slate-400">{sortedDocs.length} {sortedDocs.length === 1 ? 'registro encontrado' : 'registros encontrados'}</p>
+          </div>
+          <button 
+            onClick={() => { 
+              setDocBeingEdited(null); 
+              setSelectedType(null); 
+              setFormData({ studentId: embeddedStudentId }); 
+              const student = students.find(s => s.id === embeddedStudentId);
+              setSelectedStudentForDoc(student || null); 
+              setShowModal(true); 
+            }}
+            className="bg-[#2563eb] text-white px-4 py-2 rounded-xl flex items-center gap-2 font-bold text-xs hover:bg-blue-700 transition-all active:scale-95 shadow-lg shadow-blue-100/50"
+          >
+            <Plus size={14} /> Novo Registro
+          </button>
+        </div>
+
+        {/* Timeline body */}
+        {sortedDocs.length === 0 ? (
+          <div className="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+            <div className="w-12 h-12 bg-slate-100 text-slate-400 rounded-full flex items-center justify-center mx-auto mb-3">
+              <FileText size={24} />
+            </div>
+            <p className="text-slate-500 text-sm font-medium">Nenhum registro ou documento cadastrado para este estudante.</p>
+            <button 
+              onClick={() => { 
+                setDocBeingEdited(null); 
+                setSelectedType(null); 
+                setFormData({ studentId: embeddedStudentId }); 
+                const student = students.find(s => s.id === embeddedStudentId);
+                setSelectedStudentForDoc(student || null); 
+                setShowModal(true); 
+              }}
+              className="mt-4 px-4 py-2 bg-blue-50 text-[#2563eb] rounded-xl text-xs font-bold hover:bg-blue-100 transition-all"
+            >
+              Adicionar Primeiro Registro
+            </button>
+          </div>
+        ) : (
+          <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-[2px] before:bg-slate-200/80">
+            {sortedDocs.map((doc, idx) => {
+              const docType = DOCUMENT_TYPES.find(t => t.id === doc.type);
+              const dateFormatted = doc.date ? format(new Date(doc.date), "dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : "Sem data";
+              
+              return (
+                <div key={doc.id || idx} className="relative group p-5 bg-white rounded-2xl border border-slate-100 hover:border-slate-200 shadow-sm hover:shadow-md transition-all">
+                  {/* Dotted Node */}
+                  <div className="absolute -left-[23px] top-6 w-3 h-3 rounded-full border-2 border-white bg-blue-600 shadow-sm group-hover:bg-[#10b981] transition-colors" />
+                  
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex items-start gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-slate-50 text-slate-600 flex items-center justify-center border border-slate-100 shadow-xs">
+                        {docType?.icon || <FileText size={18} />}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h5 className="font-bold text-slate-800 text-sm">{doc.typeName || docType?.name || "Registro"}</h5>
+                          <span className="px-2 py-0.5 rounded-full bg-slate-100 text-[9px] font-black uppercase text-slate-500 tracking-wider">
+                            Por: {doc.professionalName || "N/A"}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-semibold mt-1 flex items-center gap-1">
+                          <CalendarIcon size={12} />
+                          {dateFormatted}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Quick Timeline Document Actions */}
+                    <div className="flex items-center gap-2 md:justify-end">
+                      <button 
+                        type="button"
+                        disabled={!!processingId}
+                        onClick={async () => {
+                          setProcessingId(doc.id);
+                          try {
+                            const layout = documentLayouts.find(l => l.documentTypeId === doc.type);
+                            const targetLhId = doc.letterheadId || layout?.letterheadId;
+                            const letterhead = letterheads.find(lh => lh.id === targetLhId);
+                            const docWithProfessional = {
+                              ...doc,
+                              professionalName: user?.name || doc.professionalName,
+                              professionalCouncil: user?.professionalCouncil || doc.professionalCouncil
+                            };
+                            await generateDocumentPDF(docWithProfessional, layout, letterhead, 'preview');
+                          } catch (err) {
+                            console.error(err);
+                            alert("Erro ao visualizar documento.");
+                          } finally {
+                            setProcessingId(null);
+                          }
+                        }}
+                        className="p-2 text-slate-500 hover:bg-slate-50 rounded-xl transition-colors border border-slate-100 hover:border-slate-200"
+                        title="Visualizar PDF"
+                      >
+                        {processingId === doc.id ? (
+                          <div className="w-4 h-4 border-2 border-slate-400 border-t-slate-600 rounded-full animate-spin" />
+                        ) : <Eye size={16} />}
+                      </button>
+
+                      <button 
+                        type="button"
+                        disabled={!!processingId}
+                        onClick={async () => {
+                          setProcessingId(doc.id);
+                          try {
+                            const layout = documentLayouts.find(l => l.documentTypeId === doc.type);
+                            const targetLhId = doc.letterheadId || layout?.letterheadId;
+                            const letterhead = letterheads.find(lh => lh.id === targetLhId);
+                            const docWithProfessional = {
+                              ...doc,
+                              professionalName: user?.name || doc.professionalName,
+                              professionalCouncil: user?.professionalCouncil || doc.professionalCouncil
+                            };
+                            await generateDocumentPDF(docWithProfessional, layout, letterhead, 'download');
+                          } catch (err) {
+                            console.error(err);
+                            alert("Erro ao baixar documento.");
+                          } finally {
+                            setProcessingId(null);
+                          }
+                        }}
+                        className="p-2 text-slate-500 hover:bg-slate-50 rounded-xl transition-colors border border-slate-100 hover:border-slate-200"
+                        title="Baixar PDF"
+                      >
+                        {processingId === doc.id ? (
+                          <div className="w-4 h-4 border-2 border-slate-400 border-t-slate-600 rounded-full animate-spin" />
+                        ) : <Download size={16} />}
+                      </button>
+
+                      <button 
+                        type="button"
+                        onClick={() => handleEdit(doc)}
+                        className="p-2 text-slate-500 hover:bg-blue-50 hover:text-blue-600 rounded-xl transition-colors border border-slate-100 hover:border-slate-200"
+                        title="Editar Registro"
+                      >
+                        <Settings size={16} />
+                      </button>
+
+                      {(user?.role === 'admin' || user?.permissions?.includes('admin')) && (
+                        <button 
+                          type="button"
+                          onClick={() => setDocToDelete(doc)}
+                          className="p-2 text-slate-400 hover:bg-rose-50 hover:text-red-500 rounded-xl transition-colors border border-slate-100 hover:border-rose-200"
+                          title="Excluir"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Re-use showModal or document addition inside embedded layout */}
+        {showModal && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-[99] animate-in fade-in duration-300">
+            <div className="bg-white rounded-[2.5rem] w-full max-w-4xl p-10 shadow-2xl max-h-[90vh] overflow-y-auto border border-slate-100 animate-in zoom-in-95 duration-300">
+              <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
+                <h3 className="text-xl font-black text-slate-800 tracking-tight">
+                  {docBeingEdited ? "Editar Registro" : "Novo Registro de Atendimento"}
+                </h3>
+                <button type="button" onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                  <X size={24} />
+                </button>
+              </div>
+
+              {!selectedType ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-in fade-in duration-200">
+                  {getAvailableDocumentTypes(user).map((type) => (
+                    <button 
+                      key={type.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedType(type.id);
+                        setFormData({ 
+                          studentId: embeddedStudentId,
+                          date: new Date().toISOString().split('T')[0]
+                        });
+                        const student = students.find(s => s.id === embeddedStudentId);
+                        setSelectedStudentForDoc(student || null);
+                      }}
+                      className="flex items-center gap-4 p-5 text-left bg-slate-50 hover:bg-blue-50/50 rounded-2xl border border-slate-100 hover:border-blue-200 transition-all group active:scale-[0.98]"
+                    >
+                      <div className="w-12 h-12 rounded-xl bg-white text-slate-500 group-hover:text-blue-600 border border-slate-100 flex items-center justify-center shadow-xs">
+                        {type.icon}
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-800 text-sm group-hover:text-blue-600 transition-colors">{type.name}</p>
+                        <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Clique para iniciar formulário</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <form onSubmit={handleSave} className="space-y-6">
+                  {/* Embedded student locked selection banner */}
+                  <div className="space-y-1 bg-[#f8fafc] p-5 rounded-2xl border border-slate-100">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-[#94a3b8]">Estudante Selecionado</p>
+                    <p className="text-sm font-black text-slate-700">{selectedStudentForDoc?.name || "N/A"}</p>
+                    <p className="text-xs font-bold text-slate-400">RA: {selectedStudentForDoc?.ra || "N/A"} | Escola: {schoolsList.find(sc => sc.id === selectedStudentForDoc?.schoolId)?.name || 'N/A'}</p>
+                  </div>
+
+                  {/* Letterhead selection */}
+                  <div className="p-5 bg-gradient-to-r from-blue-50/50 to-indigo-50/30 border border-blue-100/60 rounded-2xl space-y-3">
+                    <div className="flex items-center gap-2 text-sesi-blue mb-1">
+                      <Settings size={18} />
+                      <span className="text-xs font-black uppercase tracking-widest animate-pulse">Modelo de Timbrado</span>
+                    </div>
+                    <div>
+                      <select 
+                        className="w-full px-4 py-3 bg-white border border-blue-200/60 rounded-xl outline-none focus:ring-4 focus:ring-sesi-blue/5 text-xs font-semibold"
+                        value={formData.letterheadId || ""}
+                        onChange={(e) => setFormData({...formData, letterheadId: e.target.value})}
+                      >
+                        <option value="">Usar modelo padrão definido para este tipo</option>
+                        {letterheads.map(lh => (
+                          <option key={lh.id} value={lh.id}>
+                            {lh.name} {lh.isDefault ? '(Sistema)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Form fields depending on type */}
+                  <div className="max-h-[50vh] overflow-y-auto pr-2 space-y-6">
+                    {selectedType === 'school_diagnosis' && <SchoolDiagnosisForm formData={formData} setFormData={setFormData} user={user} />}
+                    {selectedType === 'psychological_listening' && (
+                      <PsychologicalListeningForm formData={formData} setFormData={setFormData} user={user} studentName={selectedStudentForDoc?.name} />
+                    )}
+                    {selectedType === 'group_attendance' && (
+                      <GroupAttendanceForm formData={formData} setFormData={setFormData} user={user} studentName={selectedStudentForDoc?.name} />
+                    )}
+                    {selectedType === 'pedagogical_participation' && (
+                      <PedagogicalParticipationForm formData={formData} setFormData={setFormData} user={user} studentName={selectedStudentForDoc?.name} />
+                    )}
+                    {selectedType === 'classroom_evolution' && (
+                      <ClassroomEvolutionForm formData={formData} setFormData={setFormData} user={user} studentName={selectedStudentForDoc?.name} />
+                    )}
+                    {selectedType === 'referral' && <ReferralForm formData={formData} setFormData={setFormData} />}
+                    {selectedType === 'attendance_declaration' && <AttendanceDeclarationForm formData={formData} setFormData={setFormData} user={user} />}
+                    {selectedType === 'authorization_term' && <AuthorizationTermForm formData={formData} setFormData={setFormData} />}
+                    {selectedType === 'aee_register' && <AeeRegisterForm formData={formData} setFormData={setFormData} user={user} />}
+                  </div>
+
+                  <div className="flex justify-between gap-4 pt-4 border-t border-slate-100">
+                    <button 
+                      type="button"
+                      onClick={() => setSelectedType(null)}
+                      className="px-6 py-3 bg-slate-50 hover:bg-slate-100 text-slate-500 rounded-xl text-xs font-black uppercase tracking-widest transition-all"
+                    >
+                      Voltar aos Tipos
+                    </button>
+                    <div className="flex gap-2">
+                      <button 
+                        type="button" 
+                        onClick={() => setShowModal(false)}
+                        className="px-6 py-3 text-slate-400 hover:bg-slate-50 rounded-xl text-xs font-black uppercase tracking-widest transition-all"
+                      >
+                        Cancelar
+                      </button>
+                      <button 
+                        type="submit"
+                        disabled={saving}
+                        className="px-6 py-3 bg-green-600 text-white font-black uppercase tracking-widest text-xs rounded-xl hover:bg-green-700 transition-all shadow-lg shadow-green-100"
+                      >
+                        {saving ? "Salvando..." : "Salvar Registro"}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Delete Document Confirmation inside embedded layout */}
+        {docToDelete && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[100] animate-in fade-in duration-300">
+            <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl animate-in zoom-in-95 duration-300 border border-slate-100">
+              <h3 className="text-lg font-black text-gray-900 mb-3 uppercase tracking-tight">Excluir Registro?</h3>
+              <p className="text-xs text-gray-500 mb-6 font-medium leading-relaxed">
+                Tem certeza que deseja excluir o registro de &ldquo;{docToDelete.typeName}&rdquo;? Esta ação removerá permanentemente este item do prontuário.
+              </p>
+              <div className="flex gap-3">
+                <button 
+                  type="button"
+                  onClick={() => setDocToDelete(null)}
+                  className="flex-1 py-3 bg-gray-50 text-gray-500 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-gray-100 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await api.documents.delete(docToDelete.id);
+                      setDocToDelete(null);
+                      loadData();
+                    } catch (err: any) {
+                      alert("Erro ao excluir: " + err.message);
+                    }
+                  }}
+                  className="flex-1 py-3 bg-red-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg shadow-red-100"
+                >
+                  Excluir
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-10 animate-in fade-in duration-700">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
@@ -499,12 +861,16 @@ export default function Documents({ user }: { user: any }) {
              <FileText size={32} />
            </div>
            <div>
-             <h2 className="text-3xl font-black text-slate-800 tracking-tight">Atendimentos</h2>
-             <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">Registros de Evolução e Documentação</p>
+             <h2 className="text-3xl font-black text-slate-800 tracking-tight">
+               {typeFilter ? (DOCUMENT_TYPES.find(t => t.id === typeFilter)?.name || "Registros") : "Registros"}
+             </h2>
+             <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em] mt-1">
+               {typeFilter ? "Gerenciamento e emissão de documentos oficiais" : "Registros de Evolução e Documentação"}
+             </p>
            </div>
         </div>
         <button 
-          onClick={() => { setDocBeingEdited(null); setSelectedType(null); setFormData({}); setSelectedStudentForDoc(null); setShowModal(true); }}
+          onClick={() => { setDocBeingEdited(null); setSelectedType(typeFilter || null); setFormData({}); setSelectedStudentForDoc(null); setShowModal(true); }}
           className="bg-pedagogic-blue text-white px-8 py-4 rounded-2xl flex items-center gap-3 font-black uppercase tracking-widest text-xs hover:bg-blue-700 hover:shadow-2xl hover:-translate-y-0.5 transition-all active:scale-95 shadow-xl shadow-blue-100"
         >
           <Plus size={18} /> Novo Registro
@@ -720,16 +1086,27 @@ export default function Documents({ user }: { user: any }) {
                 {!['school_diagnosis', 'group_attendance', 'pedagogical_participation'].includes(selectedType) && (
                   <div className="space-y-2">
                     <label className="block text-sm font-bold text-sesi-blue uppercase tracking-tight">Identificação da Pessoa</label>
-                    <StudentSelector 
-                      students={students}
-                      schools={schoolsList}
-                      selectedStudent={selectedStudentForDoc}
-                      onRefresh={loadData}
-                      onSelect={(s: any) => {
-                        setSelectedStudentForDoc(s);
-                        setFormData({...formData, studentId: s.id});
-                      }}
-                    />
+                    {isEmbedded && selectedStudentForDoc ? (
+                      <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Estudante Selecionado</span>
+                        <p className="font-bold text-slate-800 text-sm">{selectedStudentForDoc.name}</p>
+                        <p className="text-xs text-slate-600">
+                          RA: {selectedStudentForDoc.ra || "N/A"} | Turma: {selectedStudentForDoc.class || "N/A"}
+                          {selectedStudentForDoc.schoolId && ` | Escola: ${schoolsList.find(sc => sc.id === selectedStudentForDoc.schoolId)?.name || 'N/A'}`}
+                        </p>
+                      </div>
+                    ) : (
+                      <StudentSelector 
+                        students={students}
+                        schools={schoolsList}
+                        selectedStudent={selectedStudentForDoc}
+                        onRefresh={loadData}
+                        onSelect={(s: any) => {
+                          setSelectedStudentForDoc(s);
+                          setFormData({...formData, studentId: s.id});
+                        }}
+                      />
+                    )}
                   </div>
                 )}
 
@@ -2216,10 +2593,16 @@ const StudentSelector = ({ students, schools, onSelect, selectedStudent, onRefre
 
     setSavingQuick(true);
     try {
+      const selectedSchoolRecord = schools.find((sch: any) => sch.id === quickAddForm.schoolId);
+      const unitName = (selectedSchoolRecord?.unit || selectedSchoolRecord?.name || "").toUpperCase();
+
       const newPerson = await api.students.create({
         ...quickAddForm,
         age: 0,
         studentType: 'external',
+        schoolYear: new Date().getFullYear().toString(),
+        unit: unitName,
+        schoolUnit: unitName,
         observations: "Cadastro rápido via emissão de documento"
       });
       

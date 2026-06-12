@@ -95,7 +95,7 @@ export default function ImportStudents({ user }: { user: any }) {
                     rowUnit = String(schoolObj.unit).trim().toUpperCase();
                   }
                   if (!rowUnit && activeUnit !== 'Administração Central' && activeUnit !== 'Sede') {
-                    rowUnit = activeUnit.trim().toUpperCase();
+                    rowUnit = (activeUnit || "").trim().toUpperCase();
                   }
 
                   const studentData = {
@@ -140,7 +140,7 @@ export default function ImportStudents({ user }: { user: any }) {
 
                   const existingId = existingRAMap.get(ra);
                   if (existingId) {
-                    await api.students.update(existingId, studentData);
+                    // Ignora caso exista RA igual para não sobreescrever dados/perder históricos.
                     updatedCount++;
                   } else {
                     await api.students.create(studentData);
@@ -324,11 +324,11 @@ export default function ImportStudents({ user }: { user: any }) {
                 </div>
               </div>
               <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100 flex items-center gap-5">
-                <div className="w-14 h-14 bg-pedagogic-blue text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-100">
+                <div className="w-14 h-14 bg-amber-500 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-amber-100">
                   <Zap size={28} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Atualizados</p>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Existentes (Mantidos)</p>
                   <p className="text-3xl font-black text-slate-800 tracking-tight">{result.updated}</p>
                 </div>
               </div>
@@ -367,7 +367,7 @@ export default function ImportStudents({ user }: { user: any }) {
             </li>
             <li className="flex gap-3 items-start">
               <div className="w-1.5 h-1.5 rounded-full bg-pedagogic-blue mt-1.5 shrink-0"></div>
-              <span>O sistema identifica duplicados pelo <strong>{importType === "students" ? "RA" : "Nome da Escola"}</strong>.</span>
+              <span>O sistema identifica duplicados pelo <strong>{importType === "students" ? "RA" : "Nome da Escola"}</strong> e impede a sobreescrita de cadastros existentes para preservar os históricos de prontuários.</span>
             </li>
           </ul>
         </div>
