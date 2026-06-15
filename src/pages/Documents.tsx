@@ -3,7 +3,7 @@ import { Plus, Search, FileText, Download, Trash2, Eye, ChevronRight, School, Us
 import { useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { generateAIResponse, isAIEnabled } from "../lib/ai";
-import { generateDocumentPDF } from "../lib/documentGenerator";
+import { generateDocumentPDF, generateProntuarioPDF } from "../lib/documentGenerator";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useUnit } from "../contexts/UnitContext";
@@ -165,14 +165,30 @@ export default function Documents({ user, embeddedStudentId, isEmbedded }: { use
     }
   };
 
-  const handleEdit = (doc: any) => {
+  const handleEdit = async (doc: any) => {
     setDocBeingEdited(doc);
     setSelectedType(doc.type);
+    
+    let selectedStudentIds = doc.data?.selectedStudentIds || [];
+    
+    if (doc.type === 'group_attendance') {
+      try {
+        const children = await api.documents.list({ parentId: doc.id });
+        const childIds = children.map((c: any) => c.studentId).filter(Boolean);
+        if (childIds.length > 0) {
+          selectedStudentIds = Array.from(new Set([...selectedStudentIds, ...childIds]));
+        }
+      } catch (err) {
+        console.warn("Erro ao buscar alunos vinculados para edição:", err);
+      }
+    }
+
     // Ensure studentId and letterheadId are part of formData
     setFormData({ 
       ...(doc.data || {}), 
       studentId: doc.studentId,
-      letterheadId: doc.letterheadId || "" 
+      letterheadId: doc.letterheadId || "",
+      selectedStudentIds
     });
     const student = students.find(s => s.id === doc.studentId);
     setSelectedStudentForDoc(student || null);
@@ -217,10 +233,54 @@ export default function Documents({ user, embeddedStudentId, isEmbedded }: { use
         date: isEditing ? docBeingEdited.date : new Date().toISOString()
       };
 
+      let savedDocId = "";
       if (isEditing) {
         await api.documents.update(docBeingEdited.id, payload);
+        savedDocId = docBeingEdited.id;
       } else {
-        await api.documents.create(payload);
+        const created = await api.documents.create(payload);
+        savedDocId = created?.id || "";
+      }
+
+      // Se for atendimento em grupo, sincronizar com o prontuário de cada aluno selecionado
+      if (selectedType === 'group_attendance' && formData.selectedStudentIds && formData.selectedStudentIds.length > 0) {
+        if (isEditing) {
+          try {
+            const existingChildren = await api.documents.list({ parentId: savedDocId });
+            for (const child of existingChildren) {
+              await api.documents.delete(child.id);
+            }
+          } catch (delErr) {
+            console.warn("Erro ao limpar clones antigos de atendimento em grupo", delErr);
+          }
+        }
+
+        for (const stId of formData.selectedStudentIds) {
+          const st = students.find((s: any) => s.id === stId);
+          if (st) {
+            const childPayload = {
+              type: selectedType,
+              typeName: DOCUMENT_TYPES.find(t => t.id === selectedType)?.name,
+              studentId: st.id,
+              studentName: st.name,
+              studentRa: st.ra || '',
+              studentClass: st.class || '',
+              studentSchool: schoolsList.find(sc => sc.id === st.schoolId)?.name || '',
+              professionalId: user?.id || user?.uid || 'unknown',
+              professionalName: user?.name || 'N/A',
+              professionalCouncil: user?.professionalCouncil || '',
+              unit: (activeUnit || "").trim().toUpperCase(),
+              letterheadId: letterheadIdToSave,
+              parentId: savedDocId,
+              data: {
+                ...formData,
+                studentId: st.id
+              },
+              date: payload.date
+            };
+            await api.documents.create(childPayload);
+          }
+        }
       }
       
       setShowModal(false);
@@ -536,19 +596,33 @@ export default function Documents({ user, embeddedStudentId, isEmbedded }: { use
             <h4 className="text-sm font-bold text-slate-700">Histórico de Atendimentos e Documentos</h4>
             <p className="text-xs text-slate-400">{sortedDocs.length} {sortedDocs.length === 1 ? 'registro encontrado' : 'registros encontrados'}</p>
           </div>
-          <button 
-            onClick={() => { 
-              setDocBeingEdited(null); 
-              setSelectedType(null); 
-              setFormData({ studentId: embeddedStudentId }); 
-              const student = students.find(s => s.id === embeddedStudentId);
-              setSelectedStudentForDoc(student || null); 
-              setShowModal(true); 
-            }}
-            className="bg-[#2563eb] text-white px-4 py-2 rounded-xl flex items-center gap-2 font-bold text-xs hover:bg-blue-700 transition-all active:scale-95 shadow-lg shadow-blue-100/50"
-          >
-            <Plus size={14} /> Novo Registro
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => {
+                const student = students.find(s => s.id === embeddedStudentId) || { id: embeddedStudentId, name: 'Estudante' };
+                const schoolName = schoolsList.find(sc => sc.id === student.schoolId)?.name || student.school || 'N/A';
+                const fullStudentData = { ...student, schoolName };
+                const defaultLh = letterheads[0] || null;
+                generateProntuarioPDF(fullStudentData, sortedDocs, defaultLh, 'download');
+              }}
+              className="bg-slate-100 border border-slate-200 text-slate-700 px-4 py-2 rounded-xl flex items-center gap-2 font-bold text-xs hover:bg-slate-200 transition-all active:scale-95"
+            >
+              <Download size={14} /> Exportar Prontuário
+            </button>
+            <button 
+              onClick={() => { 
+                setDocBeingEdited(null); 
+                setSelectedType(null); 
+                setFormData({ studentId: embeddedStudentId }); 
+                const student = students.find(s => s.id === embeddedStudentId);
+                setSelectedStudentForDoc(student || null); 
+                setShowModal(true); 
+              }}
+              className="bg-[#2563eb] text-white px-4 py-2 rounded-xl flex items-center gap-2 font-bold text-xs hover:bg-blue-700 transition-all active:scale-95 shadow-lg shadow-blue-100/50"
+            >
+              <Plus size={14} /> Novo Registro
+            </button>
+          </div>
         </div>
 
         {/* Timeline body */}
@@ -769,7 +843,7 @@ export default function Documents({ user, embeddedStudentId, isEmbedded }: { use
                       <PsychologicalListeningForm formData={formData} setFormData={setFormData} user={user} studentName={selectedStudentForDoc?.name} />
                     )}
                     {selectedType === 'group_attendance' && (
-                      <GroupAttendanceForm formData={formData} setFormData={setFormData} user={user} studentName={selectedStudentForDoc?.name} />
+                      <GroupAttendanceForm formData={formData} setFormData={setFormData} user={user} studentName={selectedStudentForDoc?.name} students={students} />
                     )}
                     {selectedType === 'pedagogical_participation' && (
                       <PedagogicalParticipationForm formData={formData} setFormData={setFormData} user={user} studentName={selectedStudentForDoc?.name} />
@@ -1160,6 +1234,7 @@ export default function Documents({ user, embeddedStudentId, isEmbedded }: { use
                     formData={formData} 
                     setFormData={setFormData}
                     studentName={students.find(s => s.id === formData.studentId)?.name}
+                    students={students}
                   />
                 )}
                 {selectedType === 'pedagogical_participation' && (
@@ -2359,8 +2434,39 @@ const PedagogicalParticipationForm = ({ formData, setFormData }: any) => {
   );
 };
 
-const GroupAttendanceForm = ({ formData, setFormData }: any) => {
+const GroupAttendanceForm = ({ formData, setFormData, students = [] }: any) => {
   const [generating, setGenerating] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  // Filter students based on search term and those who are not already selected
+  const selectedIds = formData.selectedStudentIds || [];
+  const filteredStudents = students.filter((s: any) => {
+    const isAlreadySelected = selectedIds.includes(s.id);
+    const matchesSearch = (s.name || "").toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          (s.ra || "").toLowerCase().includes(searchTerm.toLowerCase());
+    return !isAlreadySelected && matchesSearch;
+  });
+
+  const handleAddStudent = (student: any) => {
+    const currentSelected = formData.selectedStudentIds || [];
+    const updatedSelected = [...currentSelected, student.id];
+    setFormData({
+      ...formData,
+      selectedStudentIds: updatedSelected
+    });
+    setSearchTerm("");
+    setShowDropdown(false);
+  };
+
+  const handleRemoveStudent = (studentId: string) => {
+    const currentSelected = formData.selectedStudentIds || [];
+    const updatedSelected = currentSelected.filter((id: string) => id !== studentId);
+    setFormData({
+      ...formData,
+      selectedStudentIds: updatedSelected
+    });
+  };
 
   const handleGenerateAI = async () => {
     if (!formData.groupName && !formData.objective) {
@@ -2414,8 +2520,85 @@ const GroupAttendanceForm = ({ formData, setFormData }: any) => {
           />
         </div>
 
+        {/* Dynamic selector for register student participants in group */}
+        <div className="md:col-span-2 space-y-3">
+          <label className="block text-xs font-black text-gray-500 uppercase tracking-widest pl-1">Vincular Alunos ao Prontuário</label>
+          <div className="relative">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                <input 
+                  type="text" 
+                  className="w-full pl-11 pr-4 py-3 border rounded-xl focus:ring-2 focus:ring-sesi-blue outline-none transition-all text-xs font-semibold"
+                  placeholder="Pesquise por nome ou RA para vincular ao prontuário..."
+                  value={searchTerm}
+                  onChange={(e) => {
+                    setSearchTerm(e.target.value);
+                    setShowDropdown(true);
+                  }}
+                  onFocus={() => setShowDropdown(true)}
+                />
+              </div>
+              <button 
+                type="button"
+                onClick={() => {
+                  setShowDropdown(!showDropdown);
+                  setSearchTerm("");
+                }}
+                className="px-5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl transition-all text-sm font-black flex items-center justify-center border border-slate-200"
+              >
+                +
+              </button>
+            </div>
+
+            {showDropdown && (
+              <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto divide-y divide-slate-100">
+                {filteredStudents.length > 0 ? (
+                  filteredStudents.slice(0, 15).map((student: any) => (
+                    <div 
+                      key={student.id} 
+                      onClick={() => handleAddStudent(student)}
+                      className="p-3 text-xs hover:bg-slate-50 cursor-pointer flex justify-between items-center transition-colors font-bold text-slate-700"
+                    >
+                      <div>
+                        <p>{student.name}</p>
+                        <p className="text-[10px] text-slate-400 font-normal">RA: {student.ra || 'N/A'}</p>
+                      </div>
+                      <span className="text-[9px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded uppercase font-black">Vincular</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-3 text-xs text-slate-400 text-center font-bold">Nenhum aluno disponível encontrado</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* List of selected/linked students */}
+          {selectedIds.length > 0 && (
+            <div className="flex flex-wrap gap-2 p-3 bg-slate-50 rounded-xl border border-slate-100">
+              {selectedIds.map((id: string) => {
+                const s = students.find((st: any) => st.id === id);
+                if (!s) return null;
+                return (
+                  <div key={id} className="flex items-center gap-2 bg-white border border-slate-150 pl-3 pr-2 py-1.5 rounded-xl shadow-sm text-xs font-bold text-slate-700 animate-in zoom-in-95">
+                    <span>{s.name} <span className="text-[10px] text-slate-400">({s.ra || 'N/A'})</span></span>
+                    <button 
+                      type="button" 
+                      onClick={() => handleRemoveStudent(id)}
+                      className="p-1 text-slate-400 hover:text-red-500 rounded-lg hover:bg-slate-100 transition-colors"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
         <div className="md:col-span-2">
-          <label className="block text-sm font-bold text-gray-700 mb-2">Outros Participantes</label>
+          <label className="block text-sm font-bold text-gray-700 mb-2">Outros Participantes (Não Cadastrados)</label>
           <textarea 
             className="w-full px-4 py-3 border rounded-xl focus:ring-2 focus:ring-sesi-blue outline-none transition-all" 
             rows={2} 

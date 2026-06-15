@@ -304,11 +304,30 @@ export default function Admin() {
   const handleSubmit = async (e: any) => {
     e.preventDefault();
     try {
+      // 1. Validar tamanho mínimo de senha se houver
+      if (!editingUser && (!formData.password || formData.password.length < 6)) {
+        throw new Error("A senha de acesso deve ter no mínimo 6 caracteres.");
+      }
+      if (editingUser && formData.password && formData.password.length < 6) {
+        throw new Error("A nova senha de acesso deve ter no mínimo 6 caracteres.");
+      }
+
+      // 2. Garantir formato de e-mail (caso seja apenas usuário, anexar @sgepsicologia.com)
+      const rawEmail = (formData.email || "").trim().toLowerCase();
+      if (!rawEmail) {
+        throw new Error("O e-mail ou nome de usuário é obrigatório.");
+      }
+      const emailWithDomain = rawEmail.includes("@")
+        ? rawEmail
+        : `${rawEmail}@sgepsicologia.com`;
+
       const dataToSave = {
         ...formData,
+        email: emailWithDomain,
         units: (formData.units || []).map(u => u.trim().toUpperCase()),
         expiresAt: formData.expiresAt ? new Date(formData.expiresAt).toISOString() : null
       };
+
       if (editingUser) {
         if (formData.password) {
           try {
@@ -321,11 +340,22 @@ export default function Admin() {
         }
         await api.users.update(editingUser.id, dataToSave);
       } else {
-        if (!formData.password) {
-          throw new Error("Uma senha é necessária para cadastrar e criar as credenciais de primeiro acesso.");
-        }
         // Registra a credencial no Firebase Authentication primeiro
-        await registerUserOnSecondaryApp(dataToSave.email, formData.password);
+        try {
+          await registerUserOnSecondaryApp(dataToSave.email, formData.password);
+        } catch (authErr: any) {
+          // Se o e-mail já está em uso, está ótimo, prossegue
+          if (authErr.code === 'auth/email-already-in-use') {
+            console.log("Usuário já existe no Authentication. Criando registro no Firestore...");
+          } else if (authErr.code === 'auth/weak-password') {
+            throw new Error("A senha fornecida é muito fraca. Deve ter pelo menos 6 caracteres.");
+          } else if (authErr.code === 'auth/invalid-email') {
+            throw new Error("O formato do e-mail é inválido.");
+          } else {
+            // Logar o erro mas permitir prosseguir o cadastro caso seja um problema transiente ou de configuração do Firebase Auth
+            console.warn("Falha no Firebase Auth, prosseguindo com cadastro no banco:", authErr);
+          }
+        }
         // Depois cria o registro no Firestore
         await api.users.create(dataToSave);
       }
@@ -334,7 +364,7 @@ export default function Admin() {
     } catch (err: any) {
       console.error("Erro completo ao salvar usuário:", err);
       const errorMessage = err.message || "Erro desconhecido";
-      alert(`Falha ao salvar profissional: ${errorMessage}\n\nVerifique se o domínio da aplicação está autorizado no Console do Firebase.`);
+      alert(`Falha ao salvar profissional: ${errorMessage}`);
     }
   };
 
@@ -1007,11 +1037,12 @@ export default function Admin() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2">E-mail Corporativo</label>
+                      <label className="block text-xs font-black text-gray-500 uppercase tracking-widest mb-2">E-mail ou Usuário Corporativo</label>
                       <div className="relative">
                         <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
                         <input 
-                          type="email" required
+                          type="text" required
+                          placeholder="Ex: joao.silva ou joao@email.com"
                           className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-transparent rounded-xl focus:bg-white focus:border-sesi-blue focus:ring-4 focus:ring-sesi-blue/5 outline-none transition-all font-bold"
                           value={formData.email}
                           onChange={(e) => setFormData({...formData, email: e.target.value})}

@@ -668,6 +668,7 @@ export const api = {
           
           if (filters?.type) results = results.filter(r => r.type === filters.type);
           if (filters?.professionalId) results = results.filter(r => r.professionalId === filters.professionalId);
+          if (filters?.parentId) results = results.filter(r => r.parentId === filters.parentId);
           
           return results;
         } catch (queryErr) {

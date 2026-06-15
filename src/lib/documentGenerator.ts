@@ -713,3 +713,160 @@ export const generateDocumentPDF = async (doc: any, layout?: any, letterhead?: a
     alert("Erro ao gerar o arquivo PDF. Por favor, verifique os dados e tente novamente.");
   }
 };
+
+export const generateProntuarioPDF = async (student: any, docs: any[], letterhead?: any, mode: 'download' | 'preview' = 'download') => {
+  const formattedDateNow = format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+
+  let logoBase64: string = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+  
+  try {
+    const targetLogo = letterhead?.logoUrl || SESI_LOGO_URL;
+    logoBase64 = await getBase64ImageFromURL(targetLogo);
+  } catch (err) {
+    console.error("Erro ao carregar logo para prontuário:", err);
+    try {
+      logoBase64 = await getBase64ImageFromURL(SESI_LOGO_URL);
+    } catch (e) {
+      console.error("Erro ao carregar logo fallback para prontuário:", e);
+    }
+  }
+
+  const content: any[] = [
+    { text: "PRONTUÁRIO DE ACOMPANHAMENTO PSICOPEDAGÓGICO", style: 'title', alignment: 'center', margin: [0, 0, 0, 15] },
+    {
+      style: 'infoTable',
+      table: {
+        widths: ['25%', '75%'],
+        body: [
+          [{ text: 'Estudante:', bold: true, fontSize: 10, fillType: 'solid', fillColor: '#f3f4f6' }, { text: student.name || 'N/A', fontSize: 10 }],
+          [{ text: 'RA:', bold: true, fontSize: 10, fillType: 'solid', fillColor: '#f3f4f6' }, { text: student.ra || 'N/A', fontSize: 10 }],
+          [{ text: 'Turma / Ano:', bold: true, fontSize: 10, fillType: 'solid', fillColor: '#f3f4f6' }, { text: `${student.class || 'N/A'} - ${student.schoolYear || 'N/A'}`, fontSize: 10 }],
+          [{ text: 'Escola:', bold: true, fontSize: 10, fillType: 'solid', fillColor: '#f3f4f6' }, { text: student.schoolName || student.school || 'N/A', fontSize: 10 }],
+          [{ text: 'Unidade:', bold: true, fontSize: 10, fillType: 'solid', fillColor: '#f3f4f6' }, { text: student.unit || 'N/A', fontSize: 10 }],
+          [{ text: 'Laudo Médico:', bold: true, fontSize: 10, fillType: 'solid', fillColor: '#f3f4f6' }, { text: student.hasMedicalReport ? `Sim (${student.medicalReportType || 'Não especificado'})` : 'Não', fontSize: 10 }]
+        ]
+      },
+      margin: [0, 0, 0, 20]
+    },
+    { text: "LINHA DO TEMPO DE REGISTROS DE ATENDIMENTO", style: 'sectionHeader', margin: [0, 10, 0, 10] }
+  ];
+
+  if (docs.length === 0) {
+    content.push({ text: "Nenhum registro de atendimento ou documento emitido para este estudante até o presente momento.", fontStyle: 'italic', color: '#666666', alignment: 'center', margin: [0, 20, 0, 20] });
+  } else {
+    docs.forEach((doc, idx) => {
+      const docDate = doc.date ? format(new Date(doc.date), "dd/MM/yyyy", { locale: ptBR }) : "--/--/----";
+      const docData = doc.data || {};
+      
+      let docSummary = "";
+      if (doc.type === 'psychological_listening') {
+        docSummary = `Motivo: ${docData.reason || 'N/A'}\nSíntese: ${docData.synthesis || 'N/A'}\nEncaminhamentos: ${docData.referrals || 'N/A'}`;
+      } else if (doc.type === 'group_attendance') {
+        docSummary = `Grupo: ${docData.groupName || 'N/A'}\nObjetivo: ${docData.objective || 'N/A'}\nSíntese: ${docData.synthesis || 'N/A'}`;
+      } else if (doc.type === 'pedagogical_participation') {
+        docSummary = `Atividade: ${docData.activityName || 'N/A'}\nObjetivo: ${docData.objective || 'N/A'}\nResultado: ${docData.results || 'N/A'}`;
+      } else if (doc.type === 'classroom_evolution') {
+        docSummary = `Disciplina/Atividade: ${docData.discipline || 'N/A'}\nObservação: ${docData.observations || 'N/A'}\nEstratégias: ${docData.strategiesUsed || 'N/A'}`;
+      } else if (doc.type === 'referral') {
+        docSummary = `Objetivo do Acompanhamento: ${docData.objective || 'N/A'}\nDestino: ${docData.destination || 'N/A'}`;
+      } else if (doc.type === 'attendance_declaration') {
+        docSummary = `Horário: ${docData.time || 'N/A'}\nSetor: ${docData.sector || 'N/A'}`;
+      } else if (doc.type === 'authorization_term') {
+        docSummary = `Responsável: ${docData.responsibleName || 'N/A'}\nGrau de Parentesco: ${docData.kinship || 'N/A'}`;
+      } else {
+        docSummary = Object.entries(docData)
+          .filter(([k]) => k !== 'studentId' && k !== 'letterheadId' && k !== 'selectedStudentIds')
+          .map(([k, v]) => `${k.charAt(0).toUpperCase() + k.slice(1)}: ${Array.isArray(v) ? v.join(', ') : String(v)}`)
+          .join('\n');
+      }
+
+      content.push({
+        stack: [
+          {
+            columns: [
+              {
+                text: `${idx + 1}.`,
+                width: '5%',
+                bold: true,
+                color: '#004a99',
+                fontSize: 11
+              },
+              {
+                stack: [
+                  {
+                    columns: [
+                      { text: `${doc.typeName || 'Registro de Atendimento'}`, bold: true, fontSize: 11, color: '#111827' },
+                      { text: `Data: ${docDate}`, alignment: 'right', fontSize: 9, color: '#4b5563', bold: true }
+                    ]
+                  },
+                  { text: `Profissional: ${doc.professionalName || 'N/A'} ${doc.professionalCouncil ? `(${doc.professionalCouncil})` : ''}`, fontSize: 9, color: '#374151', margin: [0, 2, 0, 4] },
+                  { text: docSummary, fontSize: 9, color: '#4b5563', leadingHeight: 1.2, margin: [0, 2, 0, 2] }
+                ],
+                width: '95%'
+              }
+            ]
+          }
+        ],
+        margin: [0, 5, 0, 12],
+        padding: [10, 10, 10, 10],
+        fillColor: '#f9fafb',
+        border: [true, true, true, true]
+      });
+    });
+  }
+
+  content.push(
+    { text: `Documento gerado em Recife, em ${formattedDateNow}.`, alignment: 'right', fontSize: 9, color: '#666666', margin: [0, 30, 0, 10] },
+    { text: 'Este documento é restrito ao acompanhamento pedagógico e psicológico do aluno, devendo ser resguardado sob sigilo profissional conforme resoluções dos respectivos conselhos de classe.', fontStyle: 'italic', fontSize: 8, color: '#9ca3af', alignment: 'center', margin: [0, 20, 0, 0] }
+  );
+
+  const docDefinition: any = {
+    pageSize: 'A4',
+    pageMargins: [40, 140, 40, 60],
+    background: () => {
+      return {
+        image: 'logo',
+        width: 595,
+        absolutePosition: { x: 0, y: 0 }
+      };
+    },
+    content: content,
+    images: {
+      logo: logoBase64
+    },
+    footer: (currentPage: number, pageCount: number) => {
+      return {
+        stack: [
+          { 
+            columns: [
+              { text: `Prontuário de ${student.name || 'Aluno'} | Página ${currentPage} de ${pageCount}`, alignment: 'right', fontSize: 8, margin: [0, 0, 40, 0], width: '100%' }
+            ]
+          }
+        ],
+        margin: [0, 0, 0, 20]
+      };
+    },
+    styles: {
+      title: { fontSize: 13, bold: true, color: '#004a99', margin: [0, 10, 0, 10], alignment: 'center' },
+      sectionHeader: { fontSize: 11, bold: true, background: '#e0f2fe', margin: [0, 10, 0, 10] },
+      infoTable: { margin: [0, 5, 0, 15] },
+      small: { fontSize: 8, color: '#666666' }
+    },
+    defaultStyle: {
+      fontSize: 10,
+      lineHeight: 1.2
+    }
+  };
+
+  try {
+    const pdf = pdfMake.createPdf(docDefinition);
+    if (mode === 'download') {
+      pdf.download(`Prontuario_${(student.name || 'Aluno').replace(/\s+/g, '_')}.pdf`);
+    } else {
+      pdf.open();
+    }
+  } catch (pdfError) {
+    console.error("Erro ao gerar Prontuário PDF:", pdfError);
+    alert("Erro ao exportar o Prontuário. Por favor, tente novamente.");
+  }
+};
