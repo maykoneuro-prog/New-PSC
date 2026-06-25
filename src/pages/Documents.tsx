@@ -1467,10 +1467,7 @@ const SchoolDiagnosisForm = ({ formData, setFormData, user }: any) => {
     
     setGeneratingInsights(true);
     try {
-      const aiEnabled = await isAIEnabled();
-      if (!aiEnabled) {
-        throw new Error("O serviço de Inteligência Artificial não está configurado.");
-      }
+      // Utiliza o serviço de IA com fallbacks locais resilientes integrados
       
       const prompt = `
         Aja como um especialista em Psicologia Escolar.
@@ -1668,10 +1665,7 @@ const PsychologicalListeningForm = ({ formData, setFormData, studentName }: any)
     
     setGeneratingInsights(true);
     try {
-      const aiEnabled = await isAIEnabled();
-      if (!aiEnabled) {
-        throw new Error("O serviço de Inteligência Artificial não está configurado.");
-      }
+      // Utiliza o serviço de IA com fallbacks locais resilientes integrados
       
       const prompt = `
         Aja como um especialista em Psicologia Escolar Clínica e Educacional.
@@ -2120,10 +2114,7 @@ const ClassroomEvolutionForm = ({ formData, setFormData, studentName }: any) => 
     
     setGenerating(true);
     try {
-      const aiEnabled = await isAIEnabled();
-      if (!aiEnabled) {
-        throw new Error("O serviço de Inteligência Artificial não está configurado.");
-      }
+      // Utiliza o serviço de IA com fallbacks locais resilientes integrados
       const prompt = `
         Aja como um Psicólogo Escolar experiente. 
         Analise os dados de evolução em sala do aluno(a) ${studentName}.
@@ -2317,10 +2308,7 @@ const PedagogicalParticipationForm = ({ formData, setFormData }: any) => {
     
     setGenerating(true);
     try {
-      const aiEnabled = await isAIEnabled();
-      if (!aiEnabled) {
-        throw new Error("O serviço de Inteligência Artificial não está configurado.");
-      }
+      // Utiliza o serviço de IA com fallbacks locais resilientes integrados
       
       const prompt = `
         Aja como um Psicólogo Escolar experiente.
@@ -2502,10 +2490,7 @@ const GroupAttendanceForm = ({ formData, setFormData, students = [] }: any) => {
     
     setGenerating(true);
     try {
-      const aiEnabled = await isAIEnabled();
-      if (!aiEnabled) {
-        throw new Error("O serviço de Inteligência Artificial não está configurado.");
-      }
+      // Utiliza o serviço de IA com fallbacks locais resilientes integrados
       
       const prompt = `
         Aja como um facilitador de grupos e Psicólogo Escolar.

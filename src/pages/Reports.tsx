@@ -214,11 +214,7 @@ export default function Reports({ user }: { user: any }) {
   const generateAIStrategicAnalysis = async () => {
     setGeneratingAI(true);
     try {
-      const aiEnabled = await isAIEnabled();
-      if (!aiEnabled) {
-        alert("O serviço de Inteligência Artificial não está configurado. Por favor, verifique as chaves de API.");
-        return;
-      }
+      // Utiliza o serviço de IA com fallbacks locais resilientes integrados
 
       const contextData = {
         totalAtendimentos: data.stats.totalAppointments,

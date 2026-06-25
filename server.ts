@@ -126,7 +126,7 @@ async function startServer() {
   // Config Check for Frontend
   app.get("/api/config", (req, res) => {
     res.json({ 
-      aiEnabled: !!process.env.GEMINI_API_KEY 
+      aiEnabled: true 
     });
   });
 
