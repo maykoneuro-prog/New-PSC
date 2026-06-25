@@ -183,12 +183,15 @@ export default function Documents({ user, embeddedStudentId, isEmbedded }: { use
       }
     }
 
+    const customDate = doc.date ? doc.date.substring(0, 10) : new Date().toISOString().substring(0, 10);
+
     // Ensure studentId and letterheadId are part of formData
     setFormData({ 
       ...(doc.data || {}), 
       studentId: doc.studentId,
       letterheadId: doc.letterheadId || "",
-      selectedStudentIds
+      selectedStudentIds,
+      customDate
     });
     const student = students.find(s => s.id === doc.studentId);
     setSelectedStudentForDoc(student || null);
@@ -216,6 +219,10 @@ export default function Documents({ user, embeddedStudentId, isEmbedded }: { use
       const defaultLayout = documentLayouts.find(l => l.documentTypeId === selectedType);
       const letterheadIdToSave = formData.letterheadId || defaultLayout?.letterheadId || "";
 
+      const dateToSave = formData.customDate 
+        ? new Date(formData.customDate + "T12:00:00").toISOString() 
+        : (isEditing ? docBeingEdited.date : new Date().toISOString());
+
       const payload = {
         type: selectedType,
         typeName: DOCUMENT_TYPES.find(t => t.id === selectedType)?.name,
@@ -230,7 +237,7 @@ export default function Documents({ user, embeddedStudentId, isEmbedded }: { use
         unit: (activeUnit || "").trim().toUpperCase(),
         letterheadId: letterheadIdToSave,
         data: formData,
-        date: isEditing ? docBeingEdited.date : new Date().toISOString()
+        date: dateToSave
       };
 
       let savedDocId = "";
@@ -1184,14 +1191,32 @@ export default function Documents({ user, embeddedStudentId, isEmbedded }: { use
                   </div>
                 )}
 
-                {/* Letterhead Selection */}
-                <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl space-y-3">
-                  <div className="flex items-center gap-2 text-sesi-blue mb-1">
-                    <Settings size={18} />
-                    <span className="text-sm font-bold uppercase tracking-tight">Modelo de Timbrado</span>
+                {/* Date and Letterhead Selection */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Date selection panel */}
+                  <div className="p-4 bg-emerald-50/60 border border-emerald-100 rounded-xl space-y-2">
+                    <div className="flex items-center gap-2 text-emerald-700 mb-1">
+                      <CalendarIcon size={18} />
+                      <span className="text-sm font-bold uppercase tracking-tight">Data do Atendimento</span>
+                    </div>
+                    <input 
+                      type="date" 
+                      className="w-full px-4 py-2 bg-white border border-emerald-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-medium text-gray-700"
+                      value={formData.customDate || new Date().toISOString().substring(0, 10)}
+                      onChange={(e) => setFormData({...formData, customDate: e.target.value})}
+                    />
+                    <p className="text-[10px] text-emerald-600">
+                      Escolha a data real em que o atendimento foi realizado.
+                    </p>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                  {/* Letterhead Selection */}
+                  <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl space-y-2 flex flex-col justify-between">
                     <div>
+                      <div className="flex items-center gap-2 text-sesi-blue mb-1">
+                        <Settings size={18} />
+                        <span className="text-sm font-bold uppercase tracking-tight">Modelo de Timbrado</span>
+                      </div>
                       <select 
                         className="w-full px-4 py-2 bg-white border border-blue-200 rounded-lg outline-none focus:ring-2 focus:ring-sesi-blue text-sm font-medium"
                         value={formData.letterheadId || ""}
@@ -1204,18 +1229,19 @@ export default function Documents({ user, embeddedStudentId, isEmbedded }: { use
                           </option>
                         ))}
                       </select>
-                      <p className="text-[10px] text-blue-600 mt-1">Este timbrado aparecerá no cabeçalho/rodapé do documento.</p>
                     </div>
-                    {formData.letterheadId && (
-                      <div className="flex items-center gap-3 bg-white p-2 rounded-lg border border-blue-200">
+                    {formData.letterheadId ? (
+                      <div className="flex items-center gap-3 bg-white p-2 rounded-lg border border-blue-200 mt-2">
                         <img 
                           src={letterheads.find(l => l.id === formData.letterheadId)?.logoUrl || ""} 
                           alt="Preview" 
-                          className="h-10 object-contain" 
+                          className="h-8 object-contain" 
                           referrerPolicy="no-referrer"
                         />
-                        <span className="text-[10px] font-bold text-gray-500 uppercase">Prévia do Cabeçalho</span>
+                        <span className="text-[10px] font-bold text-gray-500 uppercase">Prévia</span>
                       </div>
+                    ) : (
+                      <p className="text-[10px] text-blue-600 mt-1">Este timbrado aparecerá no documento.</p>
                     )}
                   </div>
                 </div>

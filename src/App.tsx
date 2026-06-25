@@ -91,6 +91,7 @@ import AnonymousReportsManagement from "./pages/AnonymousReportsManagement";
 import Profile from "./pages/Profile";
 import SaaSPlans from "./pages/SaaSPlans";
 import AtendimentoAee from "./pages/AtendimentoAee";
+import RegistrosEstudantes from "./pages/RegistrosEstudantes";
 
 // --- Error Boundary ---
 class ErrorBoundary extends Component<any, any> {
@@ -474,6 +475,12 @@ const Layout = ({ children, user, onLogout }: any) => {
       label: "Registros",
       roles: ["admin", "psychologist", "aee", "pedagogue"],
       items: [
+        {
+          icon: <User size={18} />,
+          label: "Estudantes",
+          path: "/registros/estudantes",
+          permission: "documents",
+        },
         {
           icon: <Users size={18} />,
           label: "Atendimento em Grupo",
@@ -2459,6 +2466,23 @@ function AppContent() {
               isSuperUser(user) ? (
                 <Layout user={user} onLogout={handleLogout}>
                   <AtendimentoAee user={user} />
+                </Layout>
+              ) : user ? (
+                <Navigate to="/" />
+              ) : (
+                <Navigate to="/login" />
+              )
+            }
+          />
+
+          <Route
+            path="/registros/estudantes"
+            element={
+              user?.permissions?.includes("documents") ||
+              user?.role === "aee" ||
+              isSuperUser(user) ? (
+                <Layout user={user} onLogout={handleLogout}>
+                  <RegistrosEstudantes user={user} />
                 </Layout>
               ) : user ? (
                 <Navigate to="/" />
