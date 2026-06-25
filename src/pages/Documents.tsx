@@ -795,7 +795,8 @@ export default function Documents({ user, embeddedStudentId, isEmbedded }: { use
                         setSelectedType(type.id);
                         setFormData({ 
                           studentId: embeddedStudentId,
-                          date: new Date().toISOString().split('T')[0]
+                          customDate: new Date().toISOString().substring(0, 10),
+                          letterheadId: ""
                         });
                         const student = students.find(s => s.id === embeddedStudentId);
                         setSelectedStudentForDoc(student || null);
@@ -821,25 +822,46 @@ export default function Documents({ user, embeddedStudentId, isEmbedded }: { use
                     <p className="text-xs font-bold text-slate-400">RA: {selectedStudentForDoc?.ra || "N/A"} | Escola: {schoolsList.find(sc => sc.id === selectedStudentForDoc?.schoolId)?.name || 'N/A'}</p>
                   </div>
 
-                  {/* Letterhead selection */}
-                  <div className="p-5 bg-gradient-to-r from-blue-50/50 to-indigo-50/30 border border-blue-100/60 rounded-2xl space-y-3">
-                    <div className="flex items-center gap-2 text-sesi-blue mb-1">
-                      <Settings size={18} />
-                      <span className="text-xs font-black uppercase tracking-widest animate-pulse">Modelo de Timbrado</span>
+                  {/* Date and Letterhead Selection */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Date selection panel */}
+                    <div className="p-5 bg-gradient-to-r from-emerald-50/50 to-teal-50/30 border border-emerald-100/60 rounded-2xl space-y-3">
+                      <div className="flex items-center gap-2 text-emerald-700 mb-1">
+                        <CalendarIcon size={18} />
+                        <span className="text-xs font-black uppercase tracking-widest">Data do Atendimento</span>
+                      </div>
+                      <input 
+                        type="date" 
+                        className="w-full px-4 py-3 bg-white border border-emerald-200/60 rounded-xl outline-none focus:ring-4 focus:ring-emerald-500/5 text-xs font-semibold text-gray-700"
+                        value={formData.customDate || new Date().toISOString().substring(0, 10)}
+                        onChange={(e) => setFormData({...formData, customDate: e.target.value})}
+                      />
+                      <p className="text-[10px] text-emerald-600 font-medium">
+                        Escolha a data real em que o atendimento foi realizado.
+                      </p>
                     </div>
-                    <div>
-                      <select 
-                        className="w-full px-4 py-3 bg-white border border-blue-200/60 rounded-xl outline-none focus:ring-4 focus:ring-sesi-blue/5 text-xs font-semibold"
-                        value={formData.letterheadId || ""}
-                        onChange={(e) => setFormData({...formData, letterheadId: e.target.value})}
-                      >
-                        <option value="">Usar modelo padrão definido para este tipo</option>
-                        {letterheads.map(lh => (
-                          <option key={lh.id} value={lh.id}>
-                            {lh.name} {lh.isDefault ? '(Sistema)' : ''}
-                          </option>
-                        ))}
-                      </select>
+
+                    {/* Letterhead selection */}
+                    <div className="p-5 bg-gradient-to-r from-blue-50/50 to-indigo-50/30 border border-blue-100/60 rounded-2xl space-y-3 flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center gap-2 text-sesi-blue mb-1">
+                          <Settings size={18} />
+                          <span className="text-xs font-black uppercase tracking-widest animate-pulse">Modelo de Timbrado</span>
+                        </div>
+                        <select 
+                          className="w-full px-4 py-3 bg-white border border-blue-200/60 rounded-xl outline-none focus:ring-4 focus:ring-sesi-blue/5 text-xs font-semibold"
+                          value={formData.letterheadId || ""}
+                          onChange={(e) => setFormData({...formData, letterheadId: e.target.value})}
+                        >
+                          <option value="">Usar modelo padrão definido para este tipo</option>
+                          {letterheads.map(lh => (
+                            <option key={lh.id} value={lh.id}>
+                              {lh.name} {lh.isDefault ? '(Sistema)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <p className="text-[10px] text-blue-600 font-medium mt-1">Este timbrado aparecerá no documento.</p>
                     </div>
                   </div>
 
